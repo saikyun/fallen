@@ -27,7 +27,7 @@
 (var mouse-pos @[0 0])
 
 
-(var action-logs (array ;(range 0 6)))
+(var action-logs (range 0 6))
 
 (array/fill action-logs @[0 nil])
 
@@ -510,8 +510,8 @@
 
 (def locked-door
   @{:name "Locked Door"
-    :hp 12
-    :max-hp 12
+#    :hp 12
+ #   :max-hp 12
     :blocking true
     :color @[0.5 0.5 0.5 1]
     :color2 @[0.1 0.1 0.1 1]
@@ -577,11 +577,11 @@
         X X X X X X X X X x x x x . X X >
         X X X X x x x x x . . . . . X X >
         X X X X . . . . . . . . . . X X >
-        X X X X . z . . . . z . X X X X >
-        X X X X c . . . . . . . X X X X >
+        X X X X . z . . . . . . X X X X >
+        X X X X w . . . . . . . X X X X >
         X X X X X X X X X . . X X X X X >
         X X X X X X X X X . . X X X X X >
-        X X X X X X X X X . . X X X X X >
+        X X X X X X X X X . z X X X X X >
         X X X X X X X X X X X X X X X X >
         #
 ])
@@ -605,15 +605,20 @@
                     cell)
                @[(table/clone cell)])))
 
+(var log-h 0)
+
 (defn render-inventory
   [{:inventory inv}]
   (let [size 26
         size2 20
         c [1 1 1 0.9]
-        c2 [1 1 1 0.8]]
-    (var y 46)
+        c2 [1 1 1 0.8]
+        x (math/floor (+ 16 (* rw 0.7)))]
+
+    (var y (- ui-top 48 log-h))
+
     (draw-text "Inventory"
-               [16 y]
+               [x y]
                :size size2
                :color c2)
     (+= y size2)
@@ -623,7 +628,7 @@
                    v
                    " "
                    (capitalize k))
-                 [16 y]
+                 [x y]
                  :size size
                  :color c)
       (+= y size))))
@@ -633,19 +638,21 @@
   [_]
   (let [size 20
         spacing 6
-        size2 16
+        size2 20
         spacing2 4
         c [0.9 0.9 0.9]
-        c2 [0.8 0.8 0.8]]
-    (var y (- ui-top (+ size2 spacing2
-                        (* 6 (+ size spacing)))))
+        c2 [0.8 0.8 0.7]
+        h (+ size2 spacing2
+             (* 6 (+ size spacing)))]
+    (set log-h h)
+    (var y (- ui-top 48 h))
 
     (draw-rectangle
-      16
+      0
       (- y 16)
-      400
-      300
-      [0 0 0 0.8])
+      (* 32 rw)
+      rh
+      [0 0 0 1])
 
     (draw-text "Log"
                [16 y]
@@ -702,8 +709,8 @@
   (draw-rectangle 18 18 max-hp 16 0x222222ff)
   (draw-rectangle 20 20 hp 12 0xaa3333ff)
 
-  (render-inventory player)
   (render-action-log player)
+  (render-inventory player)
 
   (when (number? npc-turn)
     (let [p (- 1 (/ npc-turn npc-delay))
@@ -711,7 +718,7 @@
               (math/sin (* math/pi p))
               1)]
       (draw-rectangle 24
-                      (- rh 168)
+                      (- rh 148)
                       (math/floor (* (math/sin
                                        (* math/pi 0.5 p))
                                      (- rw 48)))
@@ -868,7 +875,7 @@
                       (v/v* [w h])
                       (v/v* -1)
                       (v/v+ [(* 0.5 (el :width))
-                             (* 0.5 ui-top)])
+                             (* 0.35 ui-top)])
                       (v/v+ [(- (* 0.5 w))
                              (- (* 0.5 h))])))
 
