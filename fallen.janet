@@ -2,6 +2,8 @@
 
 (var ui-top 0)
 
+(var world-list nil)
+
 (var spacing 0)
 (var w 32)
 (var h 48)
@@ -13,6 +15,9 @@
 (var offset @[#(* (+ w spacing) 0.5 (length (first world)))
               #(* (+ h spacing) 0.5 (length world))
               0 0])
+
+(def die-bar-color [0.2 0.2 0.2 1])
+(def ui @{:die-bar-color die-bar-color})
 
 (var npc-delay 10)
 (var npc-turn false)
@@ -26,7 +31,6 @@
 
 (var mouse-pos @[0 0])
 
-
 (var action-logs (range 0 6))
 
 (array/fill action-logs @[0 nil])
@@ -34,18 +38,92 @@
 (var action-i 0)
 (var action-delay 700)
 
-(defn action-log
-  [& args]
-  (put action-logs action-i @[action-delay (string ;args)])
-  (++ action-i)
-  (when (>= action-i (length action-logs))
-    (set action-i 0)))
+(var animations @[])
 
-(defn capitalize
-  [s]
-  (string
-    (string/ascii-upper (string/slice s 0 1))
-    (string/slice s 1)))
+(defn run-animations
+  [anims]
+  (var i 0)
+  (while (< i (length animations))
+    (let [a (in animations i)]
+      (if-not (fiber/can-resume? a)
+        (array/remove animations i)
+        (do
+          (try (resume a)
+            ([err fib]
+              (debug/stacktrace fib err)))
+          (++ i))))))
+
+(defmacro anim
+  [& body]
+  ~(array/push animations
+               (fiber/new (fn []
+                            ,;body))))
+
+(defn ease-out-elastic
+  [p]
+  (let [c4 (/ (* 2 math/pi) 3)]
+    (case p
+      0 0
+
+      1 1
+
+      (inc
+        (* (math/pow 2 (* -10 p))
+           (math/sin (* (- (* p 10) 0.75)
+                        c4))))
+      #
+)))
+
+
+(defn ease-out
+  [p]
+  (math/sin (* p math/pi 0.5)))
+
+(defn ease-out-quad
+  [p]
+  (- 1 (math/pow (- 1 p) 2)))
+
+
+(defn ease-in-expo
+  [p]
+  (if (zero? p)
+    0
+    (math/pow 2 (- (* 10 p) 10))))
+
+(defn nice-flash!!!
+  []
+  (anim
+    (def dur 20)
+    (def col @[0 0 0 1])
+    (loop [i :range-to [0 dur]
+           :let [p (ease-out-quad (/ i dur))
+                 p (+ 0.2 (* 0.2 p))]]
+      (put col 0 p)
+      (put col 1 p)
+      (put col 2 p)
+      (yield (put ui :die-bar-color col)))
+    (loop [i :range-to [0 dur]
+           :let [p (/ i dur)
+                 p (+ 0.2 (* 0.8 (- 1 p)))]]
+      (put col 0 p)
+      (put col 1 p)
+      (put col 2 p)
+      (yield (put ui :die-bar-color col)))))
+
+
+(defn pos
+  [o]
+  (let [i (find-index |(index-of o $) (dyn :world))]
+    [(mod i ww)
+     (math/floor (/ i ww))]))
+
+
+(defn screen-pos
+  [pos]
+  (-> (v/v* pos [w h])
+      (v/v+ offset)
+      (v/v+ [(* w 0.5) (* h 0.5)])))
+
 
 (defn circle
   [{:color color
@@ -88,8 +166,103 @@
     :difficulty 4
     :color 0x003333ff
     :color2 0x002222ff
-    :render circle
+    :render :circle
     :inventory @{}})
+
+
+(defn dmg-anim
+  [o dmg]
+
+  (anim
+    (with-dyns [:world world-list]
+      (def dur 30)
+
+      (loop [i :range-to [0 dur]
+             :let [p2 (ease-out (/ (* 1 i) dur))
+                   p (math/sin (* math/pi (/ i dur)))]]
+        (yield (draw-text (string dmg)
+                          (let [pos (screen-pos (pos o))]
+                            (update pos 1 - (* (* 0.5 (+ 0.4 p2)) h)))
+                          :color [0.9 0.1 0.1 p]
+                          :size 32
+                          :center true))))))
+
+
+(do comment
+
+  (dmg-anim player 10)
+  #
+)
+
+(defn flash-die-bar
+  [o]
+  (anim
+    (with-dyns [:world world-list]
+      (def dur 20)
+      (def col @[0 0 0 1])
+
+      (loop [i :range-to [0 dur]
+             :let [p (ease-out-quad (/ i dur))
+                   p (+ 0.2 (* 0.8 p))]]
+        (put col 0 p)
+        (put col 1 p)
+        (put col 2 p)
+        (yield (draw-text "Select a die"
+                          (let [pos (screen-pos (pos o))]
+                            (update pos 1 - h))
+                          :color col
+                          :center true)))
+      (loop [i :range-to [0 200]]
+        (yield (draw-text "Select a die"
+                          (let [pos (screen-pos (pos o))]
+                            (update pos 1 - h))
+                          :color col
+                          :center true)))
+      (loop [i :range-to [0 dur]
+             :let [p (/ i dur)
+                   p (+ 0.2 (* 0.8 (- 1 p)))]]
+        (put col 0 p)
+        (put col 1 p)
+        (put col 2 p)
+        (yield (draw-text "Select a die"
+                          (let [pos (screen-pos (pos o))]
+                            (update pos 1 - h))
+                          :color col
+                          :center true)))))
+
+  (anim
+
+    (loop [i :range-to [0 40]]
+      (yield))
+    (def dur 20)
+    (def col @[0 0 0 1])
+    (loop [i :range-to [0 dur]
+           :let [p (ease-out-quad (/ i dur))
+                 p (+ 0.2 (* 0.8 p))]]
+      (put col 0 p)
+      (put col 1 p)
+      (put col 2 p)
+      (yield (put ui :die-bar-color col)))
+    (loop [i :range-to [0 dur]
+           :let [p (/ i dur)
+                 p (+ 0.2 (* 0.8 (- 1 p)))]]
+      (put col 0 p)
+      (put col 1 p)
+      (put col 2 p)
+      (yield (put ui :die-bar-color col)))))
+
+(defn action-log
+  [& args]
+  (put action-logs action-i @[action-delay (string ;args)])
+  (++ action-i)
+  (when (>= action-i (length action-logs))
+    (set action-i 0)))
+
+(defn capitalize
+  [s]
+  (string
+    (string/ascii-upper (string/slice s 0 1))
+    (string/slice s 1)))
 
 
 (var logs @[])
@@ -139,24 +312,12 @@
       (array/push logs v)
       v)))
 
-
-(defn pos
-  [o]
-  (let [i (find-index |(index-of o $) (dyn :world))]
-    [(mod i ww)
-     (math/floor (/ i ww))]))
-
 (defn mouse-tile
   []
   (let [[x y] (v/v- mouse-pos offset)]
     [(math/floor (/ x w))
      (math/floor (/ y h))]))
 
-(defn screen-pos
-  [pos]
-  (-> (v/v* pos [w h])
-      (v/v+ offset)
-      (v/v+ [(* w 0.5) (* h 0.5)])))
 
 (defn mouse-dir
   []
@@ -303,28 +464,33 @@
       #
 )))
 
+(def render-functions
+  {:rec rec
+   :rec2 rec2
+   :circle circle
+   :door-rec door-rec})
 
 (def inner-wall
   @{:blocking true
     :color 0x111111ff
-    :render rec})
+    :render :rec})
 
 (def inner-wall-down
   @{:blocking true
     :color 0x111111ff
     :color2 0x333333ff
     :offset 15
-    :render rec2})
+    :render :rec2})
 
 (def X inner-wall)
 (def x inner-wall-down)
 
 (def ground
   @{:blocking false
-    :color 0x666666ff
+    :color [0.1 0.1 0.08]
     :hover-color [0.7 0.7 0.7]
     :hover-time 0
-    :render rec})
+    :render :rec})
 
 (def . ground)
 
@@ -340,7 +506,6 @@
               ($ :interact))
         (in (dyn :world) i)))
 
-
 (def p @[(table/clone ground) player])
 
 (defn fight
@@ -348,6 +513,9 @@
                             :total total}]
   (def dmg (+ (attacker :damage)
               (- total difficulty)))
+
+  (print "huh?")
+  (dmg-anim defender dmg)
   (action-log (attacker :name) " dealt " dmg " damage to " (defender :name) ".")
   (update defender :hp - dmg)
 
@@ -367,9 +535,10 @@
   [o tile-i]
   (let [tile (in (dyn :world) tile-i)
         any-difficult (find |($ :difficulty) tile)]
-
-    (if (and any-difficult (not (o :selected-die)))
-      (action-log (o :name) " does not have a die selected.")
+    (if (and any-difficult
+             (not (o :selected-die)))
+      (do (flash-die-bar any-difficult)
+        nil)
 
       (let [total (if-not any-difficult
                     0
@@ -457,14 +626,14 @@
                                  (not (blocking? i)))]
                   i)
         target (math/floor
-                 (* (+ 10 (length empties))
+                 (* (+ 0 (length empties))
                     (math/random)))]
-    (if (< target 10)
+    (if (< target 0)
       #(action-log (self :name) " is just standing there.")
       123
       (do
         # (action-log (self :name) " shambles about.")
-        (move-i self (get empties (- target 10)))))))
+        (move-i self (get empties (- target 0)))))))
 
 (def zombie
   @{:name "Zombie"
@@ -481,7 +650,7 @@
     :act |(unless
             (fight-neighbour $)
             (move-randomly $))
-    :render circle})
+    :render :circle})
 
 (def z @[ground zombie])
 
@@ -510,8 +679,8 @@
 
 (def locked-door
   @{:name "Locked Door"
-#    :hp 12
- #   :max-hp 12
+    #    :hp 12
+    #   :max-hp 12
     :blocking true
     :color @[0.5 0.5 0.5 1]
     :color2 @[0.1 0.1 0.1 1]
@@ -519,7 +688,7 @@
     :offset 10
     :difficulty 7
     :interact pick-lock
-    :render door-rec})
+    :render :door-rec})
 
 (defn nil-safe-inc
   [v]
@@ -554,10 +723,10 @@
     :offset 30
     :interact take-items
     :items items
-    :render rec2})
+    :render :rec2})
 
 
-(var world
+(def world-map
   (let [l @[ground locked-door]
         c (chest :lockpick)
         w (chest :artifact)]
@@ -591,19 +760,30 @@
 (set ww 0)
 (var acc 0)
 
-(set world (seq [cell :in world
-                 :let [_ (if (= > cell)
-                           (set acc 0)
-                           (do
-                             (++ acc)
-                             (set ww (max ww acc))))]
-                 :when (not= > cell)]
-             (cond (indexed? cell)
-               (map |(if (= player $)
-                       $
-                       (table/clone $))
-                    cell)
-               @[(table/clone cell)])))
+
+(defn new-world
+  []
+  {:world
+   (seq [cell :in world-map
+         :let [_ (if (= > cell)
+                   (set acc 0)
+                   (do
+                     (++ acc)
+                     (set ww (max ww acc))))]
+         :when (not= > cell)]
+     (cond (indexed? cell)
+       (map |(if (= player $)
+               $
+               (table/clone $))
+            cell)
+       @[(table/clone cell)]))
+   :ww ww})
+
+(defonce world-thing (new-world))
+(def world-thing (new-world))
+
+(set ww (world-thing :ww))
+(set world-list (world-thing :world))
 
 (var log-h 0)
 
@@ -740,7 +920,7 @@
                     y
                     (math/floor (- rw padding))
                     (math/floor (+ w padding))
-                    [0.2 0.2 0.2 1])
+                    (ui :die-bar-color))
 
     (loop [i :range [0 nof]
            :let [die (in dice i)
@@ -818,9 +998,32 @@
 
   (set ui-press false))
 
+(def mouse-presses
+  {:press 1
+   :double-click 1
+   :triple-click 1})
+
+(defn set-die
+  [o n]
+  (put o :selected-die
+       (if (= (o :selected-die) n)
+         nil
+         n)))
+
+(defn do-npc-turn
+  [world]
+  (loop [i :range [0 (length world)]
+         :let [tile (in world i)
+               x (mod i ww)
+               y (math/floor (/ i ww))]
+         o :in tile
+         :when (and (not (o :dead))
+                    (o :act))]
+    (:act o)))
+
 (defn on-event
   [ev]
-  (with-dyns [:world world]
+  (with-dyns [:world world-list]
     (match ev
       [:mouse-move pos]
       (set mouse-pos (v/v- pos [rx ry]))
@@ -828,31 +1031,50 @@
       [:mouse-drag pos]
       (set mouse-pos (v/v- pos [rx ry]))
 
-      [:press pos]
-      (if (on-ui?)
-        (set ui-press true)
-        (when (and (not npc-turn)
-                   (move player ;(mouse-dir)))
-          (set npc-turn npc-delay)))
+      [(_ (mouse-presses (ev 0))) pos]
+      (do
+        (print "press")
+        (if (on-ui?)
+          (set ui-press true)
+          (do
+            (when npc-turn
+              (do-npc-turn (dyn :world)))
+
+            (when (and #(not npc-turn)
+                       (move player ;(mouse-dir)))
+              (set npc-turn npc-delay)))))
 
       [:key-down k]
-      (when (not npc-turn)
+      (unless
+        (match k
+          :1 (set-die player 0)
+          :2 (set-die player 1)
+          :3 (set-die player 2)
+          :4 (set-die player 3)
+          :5 (set-die player 4)
+          :6 (set-die player 5))
+
         # (pp ev)
         (when
           (match k
-            :w
-            (move-dir player 0 -1)
-            :a
-            (move-dir player -1 0)
-            :s
-            (move-dir player 0 1)
-            :d
-            (move-dir player 1 0))
+            :w (do (when npc-turn
+                     (do-npc-turn (dyn :world)))
+                 (move-dir player 0 -1))
+            :a (do (when npc-turn
+                     (do-npc-turn (dyn :world)))
+                 (move-dir player -1 0))
+            :s (do (when npc-turn
+                     (do-npc-turn (dyn :world)))
+                 (move-dir player 0 1))
+            :d (do (when npc-turn
+                     (do-npc-turn (dyn :world)))
+                 (move-dir player 1 0)))
+
           (set npc-turn npc-delay))))))
 
 (defn render
   [el]
-  (with-dyns [:world world]
+  (with-dyns [:world world-list]
     (draw-rectangle 0 0 (el :width) (el :height) :black)
     (set rw (el :width))
     (set rh (el :height))
@@ -882,32 +1104,29 @@
       # then the camera offset
       (rl-translatef ;offset 0)
 
-      (when (number? npc-turn)
+      (when (number? (log :npc npc-turn))
         (-- npc-turn)
 
-        (when (zero? npc-turn)
+        (when (> 1 npc-turn)
           (set npc-turn true)))
 
-      (when (true? npc-turn)
+      (let [world (dyn :world)]
+        (when (true? npc-turn)
+          (do-npc-turn world))
+
         (loop [i :range [0 (length world)]
                :let [tile (in world i)
                      x (mod i ww)
                      y (math/floor (/ i ww))]
                o :in tile
-               :when (and (not (o :dead))
-                          (o :act))]
-          (:act o)))
-
-      (loop [i :range [0 (length world)]
-             :let [tile (in world i)
-                   x (mod i ww)
-                   y (math/floor (/ i ww))]
-             o :in tile]
-
-        (:render o x y)))
+               :let [render-kw (in o :render)
+                     render-f (in render-functions render-kw)]]
+          (render-f o x y))))
 
     (when (true? npc-turn)
       (set npc-turn false))
+
+    (run-animations animations)
 
     (render-player-ui player)
 
