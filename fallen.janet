@@ -712,6 +712,56 @@
         (update-in taker [:inventory i] nil-safe-inc)))
     (action-log (container :name) " is empty.")))
 
+(def item-table
+  {1 {1 :short-sword
+      2 :rusty-gun
+      3 [(roll-die 10) :gold]
+      4 :cloth-helmet
+      5 :cloth-armor
+      6 :apple}
+   2 {1 :long-sword
+      2 :iron-gun
+      3 [(+ 20 (roll-die 10)) :gold]
+      4 :leather-helmet
+      5 :leather-armor
+      6 :holy-water}
+   3 {1 :amethyst-sword
+      2 :shotgun
+      3 [(+ 100 (roll-die 30)) :gold]
+      4 :iron-helmet
+      5 :iron-armor
+      6 :health-potion}})
+
+(def nof-items-table
+  [[0 1]
+   [3 2]
+   [6 3]])
+
+(def quality-table
+  [[0 1]
+   [3 2]
+   [6 3]])
+
+(defn roll-table
+  [t die]
+  (def res (roll-die die))
+  (var outcome nil)
+  (loop [v :in (reverse t)]
+    (when (>= res (v 0))
+      (set outcome (v 1))
+      (break)))
+  outcome)
+
+(defn random-items
+  []
+  (let [nof (roll-table nof-items-table 6)
+        quality (roll-table quality-table 6)]
+    (seq [_ :range [0 nof]]
+      (get-in item-table [quality
+                          (roll-die 6)]))))
+
+(log :item (random-items))
+
 (defn chest
   [& items]
   @{:name "Chest"
@@ -722,14 +772,17 @@
     :color2 @[0.6 0.6 0 1]
     :offset 30
     :interact take-items
-    :items items
+    :items (if (= :random (first items))
+             (random-items)
+             items)
     :render :rec2})
 
 
 (def world-map
   (let [l @[ground locked-door]
         c (chest :lockpick)
-        w (chest :artifact)]
+        w (chest :artifact)
+        r (chest :random)]
 
     (def measure
       @[1 2 3 4 5 6 7 8 9 0 1 2 3])
@@ -745,7 +798,7 @@
         X X X X X X X X X X X X X . X X >
         X X X X X X X X X x x x x . X X >
         X X X X x x x x x . . . . . X X >
-        X X X X . . . . . . . . . . X X >
+        X X X X . . . . . . . . . r X X >
         X X X X . z . . . . . . X X X X >
         X X X X w . . . . . . . X X X X >
         X X X X X X X X X . . X X X X X >
