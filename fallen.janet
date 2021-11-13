@@ -212,6 +212,7 @@
 
 (defn die-roll-anim
   [final-res &keys {:x x
+                    :difficulty-label diff-label
                     :extra extra
                     :target target
                     :after after}]
@@ -224,14 +225,23 @@
         (math/floor (+ 10 y))
         60
         60
-        (tracev extra)
+        extra
         col)))
+
+  (defn draw-target
+    []
+    (when target
+      (draw-text (string diff-label target)
+                 [(/ rw 2) (* rh 0.4)]
+                 :color :white
+                 :size 32
+                 :center true)))
 
   (default x 0)
   (anim
     (def dur-scale 1)
 
-    (def dur (math/floor (* dur-scale 60)))
+    (def dur (math/floor (* dur-scale 40)))
     (var res nil)
     (var delay 0)
 
@@ -245,12 +255,13 @@
         (when (>= (+ i delay) dur)
           (set res final-res)))
       (-- delay)
+      (draw-target)
 
       (draw-extra (+ x (* 0.5 rw))
                   (* rh 0.5)
                   highlight-die-color)
       (yield (draw-die
-               (math/floor (+ x (- rw (* 0.5 rw px))))
+               (- (math/floor (+ x (- rw (* 0.5 rw px)))) 30)
                (math/floor (- (* rh 0.5) (* rh 0.5 py)))
                60
                60
@@ -273,9 +284,10 @@
                        fail-die-color
 
                        highlight-die-color)]]
+      (draw-target)
       (rl-push-matrix)
       (rl-translatef
-        (math/floor (- (+ x (- (* 0.5 rw) (* 0.5 60 scale))) 100))
+        (math/floor (- (+ x (- (* 0.5 rw) (* 0.5 60 scale))) 100 30))
         (math/floor (- (* rh 0.5) (* 1 60 scale)))
         0)
       (rl-scalef (inc scale) (inc scale) 1)
@@ -293,11 +305,56 @@
 
       (rl-push-matrix)
       (rl-translatef
-        (math/floor (+ x (- (* 0.5 rw) (* 0.5 60 scale))))
+        (math/floor (+ -30 x (- (* 0.5 rw) (* 0.5 60 scale))))
         (math/floor (- (* rh 0.5) (* 1 60 scale)))
         0)
       (rl-scalef (inc scale) (inc scale) 1)
 
+      (draw-die
+        0
+        0
+        60
+        60
+        res
+        col)
+      (yield (rl-pop-matrix)))
+
+    (def dur3 (math/floor (* dur-scale 20)))
+    (loop [i :range [0 (inc dur3)]
+           :let [p (/ i dur3)
+                 scale 0.4
+                 col (cond
+                       (and target (>= (+ (or extra 0) final-res) target))
+                       success-die-color
+
+                       target
+                       fail-die-color
+
+                       highlight-die-color)]]
+      (draw-target)
+      (rl-push-matrix)
+      (rl-translatef
+        (math/floor (- (+ -30 x (- (* 0.5 rw) (* 0.5 60 scale))) 100))
+        (math/floor (- (* rh 0.5) (* 1 60 scale)))
+        0)
+      (rl-scalef (inc scale) (inc scale) 1)
+
+      (when extra
+        (draw-die
+          0
+          0
+          60
+          60
+          extra
+          col))
+      (rl-pop-matrix)
+
+      (rl-push-matrix)
+      (rl-translatef
+        (math/floor (+ x -30 (- (* 0.5 rw) (* 0.5 60 scale))))
+        (math/floor (- (* rh 0.5) (* 1 60 scale)))
+        0)
+      (rl-scalef (inc scale) (inc scale) 1)
       (draw-die
         0
         0
@@ -321,9 +378,10 @@
 
                          highlight-die-color)
                       a]]]
+      (draw-target)
       (rl-push-matrix)
       (rl-translatef
-        (math/floor (- (+ x (- (* 0.5 rw) (* 0.5 60 scale))) 100))
+        (math/floor (- (+ -30 x (- (* 0.5 rw) (* 0.5 60 scale))) 100))
         (math/floor (- (* rh 0.5) (* 1 60 scale)))
         0)
       (rl-scalef (inc scale) (inc scale) 1)
@@ -340,7 +398,7 @@
 
       (rl-push-matrix)
       (rl-translatef
-        (math/floor (+ x (- (* 0.5 rw) (* 0.5 60 scale))))
+        (math/floor (+ x -30 (- (* 0.5 rw) (* 0.5 60 scale))))
         (math/floor (- (* rh 0.5) (* 1 60 scale)))
         0)
       (rl-scalef (inc scale) (inc scale) 1)
@@ -443,32 +501,33 @@
                    r
                    color))))
 
-(defonce player
+(def player
   @{:name "Saikyun"
-    :dice (seq [_ :range [0 6]]
+    :dice (seq [_ :range [0 3]]
             (roll-die 6))
     :render-dice @[]
-    :hp 30
-    :max-hp 42
+    :hp 17
+    :max-hp 17
     :faith 14
     :max-faith 22
     :insanity 0
     :max-insanity 70
     :damage 3
     :blocking true
-    :difficulty 4
+    :difficulty 2
     :color 0x003333ff
     :color2 0x002222ff
     :render :circle
     :inventory @{}})
 
-(when (empty? (player :render-dice))
+(if-not (empty? (player :render-dice))
+  (loop [d :in (player :render-dice)]
+    (put d :changed tick))
   (anim
     (loop [i :range [0 (length (player :dice))]
            :let [n (in (player :dice) i)]]
-      (loop [_ :range [0 (+ 5 (roll-die 12))]]
+      (loop [_ :range [0 (+ 5 (roll-die 18))]]
         (yield nil))
-      (tracev n)
       (yield (die-roll-anim n
                             :after |(put-in player [:render-dice i]
                                             @{:die n
@@ -815,7 +874,7 @@
 (def p @[(table/clone ground) player])
 
 (def dmg-color [0.9 0.1 0.1])
-(def faith-dmg-color [0.1 0.1 0.9])
+(def faith-dmg-color [0.3 0.3 0.9])
 (def insanity-dmg-color #[0.7 0.1 0.7]
   [0.3 0.8 0.3])
 
@@ -849,7 +908,9 @@
         :let [difficulty (other :difficulty)
               _ (cond
                   (other :hp)
-                  (action-log (other :name) " has armour rank " (other :difficulty) ".")
+                  (action-log (other :name)
+                              " has armour rank "
+                              (other :difficulty) ".")
                   difficulty
                   (action-log (other :name) " has difficulty " (other :difficulty) "."))]
         :when (other :interact)]
@@ -860,8 +921,8 @@
       (if (pos? (o :faith))
         (let [faith-dmg (roll-die 6)]
           (action-log (o :name) "'s faith is being tested...")
-          (when-let [t (other :fail-quotes-table)]
-            (flash-text-above o (get-table t faith-dmg)))
+          #          (when-let [t (other :fail-quotes-table)]
+          #            (flash-text-above o (get-table t faith-dmg)))
           (update o :faith - faith-dmg)
           (dmg-anim o faith-dmg :color faith-dmg-color))
         (let [insanity-dmg 1]
@@ -904,26 +965,34 @@
           (die-roll-anim
             roll
             :extra
-            (tracev selected-die)
+            selected-die
+
+            :difficulty-label
+            (cond
+              (any-difficult :hp)
+              "Armour rating: "
+
+              (any-difficult :difficulty)
+              "Difficulty: ")
 
             :target
-            (log (any-difficult :difficulty))
+            (any-difficult :difficulty)
 
             :after
             (fn []
-              (let [total
-                    (let [roll (roll-die 6)]
-                      # with selected die
-                      (if selected-die
-                        (let [total (+ roll selected-die)]
-                          (put-in o [:dice die-i] 0)
-                          (put o :selected-die nil)
-                          total)
+              (let [total # with selected die
+                    (if selected-die
+                      (let [total (+ roll selected-die)]
+                        (put-in o [:dice die-i] 0)
+                        (put o :selected-die nil)
+                        total)
 
-                        (do # no die selected
-                          roll)))]
+                      (do # no die selected
+                        roll))]
 
-                (interact-with-tile o tile total)))))))))
+                (interact-with-tile o tile total)
+
+                (set npc-turn npc-delay)))))))))
 
 (defn fight-neighbour
   [self]
@@ -996,8 +1065,8 @@
   @{:name "Zombie"
     :hp 12
     :max-hp 12
-    :damage 3
-    :difficulty 5
+    :damage 1
+    :difficulty 3
     :blocking true
     :color 0x552255ff
     :color2 0x441144ff
@@ -1046,10 +1115,13 @@
     :difficulty 7
     :interact pick-lock
     :render :door-rec
-    :fail-quotes-table
-    @[0 "I must be free of sin."
-      3 "I won't be stopped so easily."
-      6 "Fucking lock! *kicks door*"]})
+    # thought about having quotes on fail
+    # but it was sort of annoying
+    #:fail-quotes-table
+    #@[0 "I must be free of sin."
+    #  3 "I won't be stopped so easily."
+    #  6 "Fucking lock! *kicks door*"]
+})
 
 (defn nil-safe-inc
   [v]
@@ -1315,6 +1387,16 @@
         :max-insanity max-insanity
         :inventory inv} player)
 
+  (when (not (pos? hp))
+    (draw-rectangle 0 0 (inc rw) (inc rh) :black)
+    (draw-text "You died"
+               (v/v+ mind-shake
+                     [(/ rw 2) (/ rh 2)])
+               :center true
+               :size 64
+               :color dmg-color)
+    (break))
+
   (when (>= insanity 4)
     (when (< 4 (roll-die 6))
       (put mind-shake 0 (- (roll-die 6) 6)))
@@ -1530,7 +1612,8 @@
                      (do-npc-turn (dyn :world)))
                  (move-dir player 1 0)))
 
-          (set npc-turn npc-delay))))))
+          #(set npc-turn npc-delay)
+)))))
 
 (defn render
   [el]
