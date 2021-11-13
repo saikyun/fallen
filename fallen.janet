@@ -1,5 +1,59 @@
 (use freja/flow)
 
+(defn points-between-line
+  [[emx emy] [pmx pmy]]
+
+  (var points @[])
+
+  (let [emx (+ 0.5 emx)
+        emy (+ 0.5 emy)
+        pmx (+ 0.5 pmx)
+        pmy (+ 0.5 pmy)
+
+        start-x emx
+        stop-x pmx
+        start-y emy
+        stop-y pmy
+
+        dir (v/v-
+              [stop-x stop-y]
+              [start-x start-y])
+
+        divver (if (> (math/abs (dir 0)) (math/abs (dir 1)))
+                 (dir 0)
+                 (dir 1))
+
+        dir2 (v/v* dir (/ 1 (math/abs divver)))]
+
+    (var x start-x)
+    (var y start-y)
+
+    #                # determine direction of loop
+    (while (or ((if (< start-x stop-x) < >)
+                 x
+                 stop-x)
+               ((if (< start-y stop-y) < >)
+                 y
+                 stop-y))
+
+      # draw line points
+      #     (comment
+      (comment draw-circle (math/floor (* 10 (math/floor x)))
+               (math/floor (* 10 (math/floor y)))
+               5
+               :yellow)
+      #
+      #)
+
+      (array/push points [x y])
+
+      (+= x (dir2 0))
+      (+= y (dir2 1))))
+
+  (array/push points [(+ 0.5 pmx) (+ 0.5 pmy)])
+
+  points)
+
 (defn roll-die
   [n]
   (inc (math/floor (* n (math/random)))))
@@ -140,7 +194,7 @@
         d1 2.75]
     (cond
       (< p (/ 1 d1))
-      (log :1 (* n1 p p))
+      (* n1 p p)
 
       (< p (/ 2 d1))
       (+ (* n1
@@ -470,10 +524,16 @@
   (def res (roll-die die))
   (get-table t res))
 
+
+(defonce player
+  @{})
+
 (defn circle
-  [{:color color
-    :color2 color2
-    :hp hp} x y]
+  [o x y]
+  (def {:color color
+        :color2 color2
+        :hp hp} o)
+
   (when (pos? hp)
     (let [r (* 0.5 (min (- w spacing) (- h spacing)))]
       (draw-circle (math/floor (+ (* x w)
@@ -501,7 +561,8 @@
                    r
                    color))))
 
-(def player
+(merge-into
+  player
   @{:name "Saikyun"
     :dice (seq [_ :range [0 3]]
             (roll-die 6))
@@ -603,6 +664,23 @@
         (yield (draw-text text
                           (let [pos (screen-pos (pos o))]
                             (update pos 1 - (* 2 h)))
+                          :color col
+                          :center true))))))
+
+(defn flash-text-on
+  [o text]
+  (def text (buffer text))
+  (put latest-above o text)
+  (anim
+    (with-dyns [:world world-list]
+      (def dur 20)
+      (def col @[1 1 1 1])
+
+      (loop [i :range-to [0 dur]
+             :when (= (latest-above o) text)]
+        (yield (draw-text text
+                          (let [pos (screen-pos (pos o))]
+                            (update pos 1 - (* 0 h)))
                           :color col
                           :center true))))))
 
@@ -754,7 +832,7 @@
         (- h spacing)
         hc))
 
-    (comment
+    (do comment
       (draw-text
         (string x "/" y)
         [(* x w)
@@ -997,6 +1075,7 @@
 (defn fight-neighbour
   [self]
   (var fought nil)
+
   (let [[x y] (pos self)]
     (loop [ox :range-to [(dec x) (inc x)]
            oy :range-to [(dec y) (inc y)]
@@ -1041,6 +1120,81 @@
   [o x y]
   (move-i o (+ x (* ww y))))
 
+(defn chase-target
+  [self]
+  (var blocked nil)
+  (def points (points-between-line
+                (pos self)
+                (pos player)))
+
+  (loop [[x y] :in points
+         :let [x (math/floor x)
+               y (math/floor y)
+               blocking (blocking? (xy->i x y))
+               _
+               (flash-text-on (first (get (dyn :world) (xy->i x y))) "*")]
+
+         :when (and blocking
+                    (not= self blocking))]
+    (set blocked [x y])
+    #(break)
+)
+
+  (when blocked
+    (put self :target nil))
+
+  (cond
+    (self :target)
+    (do
+      (print "moving to target")
+      (move-i self (xy->i ;(map math/floor (points 1))))
+      (put self :last-known-pos (pos (self :target)))
+      true)
+
+    (self :last-known-pos)
+    (when-let [p (get (tracev (points-between-line
+                                (pos self)
+                                (self :last-known-pos))) 1)]
+      (def target (map math/floor p))
+      (do (flash-text-above self "?")
+        (move-i self (xy->i ;target))
+        true))))
+
+(defn find-target
+  [self]
+
+  (var blocked nil)
+
+  (def points (points-between-line
+                (pos self)
+                (pos player)))
+
+  (loop [[x y] :in points
+         :let [x (math/floor x)
+               y (math/floor y)
+               blocking (blocking? (xy->i x y))
+               _
+               (flash-text-on (first (get (dyn :world) (xy->i x y))) "*")]
+
+         :when (and blocking
+                    (not= self blocking)
+                    (not= player blocking))]
+    (set blocked [x y])
+    #(break)
+)
+
+  (when blocked
+    (put self :target nil))
+
+  (cond (= (tracev (pos self)) (tracev (self :last-known-pos)))
+    (do (put self :last-known-pos nil)
+      (flash-text-above self ":("))
+
+    (not blocked)
+    (do (put self :target player)
+      (flash-text-above self "!!")
+      (put self :last-known-pos (pos (self :target)))
+      true)))
 
 (defn move-randomly
   [self]
@@ -1073,9 +1227,12 @@
     :interact fight
     :selected-dice 0
     :dice @[0]
-    :act |(unless
-            (fight-neighbour $)
-            (move-randomly $))
+    :act |(do
+            (find-target $)
+            (or (fight-neighbour $)
+                (chase-target $)
+                (move-randomly $))
+            (find-target $))
     :render :circle})
 
 (def z @[ground zombie])
@@ -1097,11 +1254,12 @@
 (defn pick-lock
   [door picker &keys {:difficulty difficulty
                       :total total}]
-  (when (use-item picker :lockpick)
-    (action-log "Success! " (picker :name) " unlocked the " (door :name) ".")
-    (put door :blocking false)
-    (put door :interact nil)
-    (put-in door [:color 3] 0.0)))
+  #(when (use-item picker :lockpick)
+  (action-log "Success! " (picker :name) " unlocked the " (door :name) ".")
+  (put door :blocking false)
+  (put door :interact nil)
+  (put-in door [:color 3] 0.0))
+#)
 
 (def locked-door
   @{:name "Locked Door"
@@ -1144,6 +1302,20 @@
       (loop [i :in is]
         (update-in taker [:inventory i] nil-safe-inc)))
     (action-log (container :name) " is empty.")))
+
+(def items
+  {:lockpick
+   {:description
+    ``
+    +1 Lockpicking
+    ``
+    :flavour
+    ``
+    "Crafted by the Thieves Guild in Robios."
+    ``}
+   :short-sword {:description "+1 Melee damage"}
+   :cloth-armor {:description "+1 Armor"
+                 :flavour "Favoured by the thiefs of Robios."}})
 
 (def item-table
   {1 {1 :short-sword
@@ -1220,11 +1392,11 @@
         X X X X X X X X X x x x x . X X >
         X X X X x x x x x . . . . . X X >
         X X X X . . . . . . . . . r X X >
-        X X X X . z . . . . . . X X X X >
+        X X X X . . . . . . . . X X X X >
         X X X X w . . . . . . . X X X X >
         X X X X X X X X X . . X X X X X >
         X X X X X X X X X . . X X X X X >
-        X X X X X X X X X . z X X X X X >
+        X X X X X X X X X . . X X X X X >
         X X X X X X X X X X X X X X X X >
         #
 ])
@@ -1266,8 +1438,10 @@
   (let [size 26
         size2 20
         c [1 1 1 0.9]
+        hover-c [0.7 0.7 0 1]
         c2 [1 1 1 0.8]
-        x (math/floor (+ 16 (* rw 0.7)))]
+        x (math/floor (+ 16 (* rw 0.7)))
+        [mx my] mouse-pos]
 
     (var y (- ui-top 48 log-h))
 
@@ -1275,16 +1449,38 @@
                [x y]
                :size size2
                :color c2)
+
     (+= y size2)
 
+    (def desc-y y)
+
     (loop [[k v] :pairs inv]
+      (def hover (and (> mx x)
+                      (> my y)
+                      (< my (+ y size))))
+      (when hover
+        (def desc (get-in items [k :description]))
+        (def [w h] (measure-text desc :size size))
+        (draw-text desc
+                   [(- x w 16) desc-y]
+                   :size size
+                   :color c)
+
+        (def desc (get-in items [k :flavour]))
+        (def [w2 h2] (measure-text desc :size (- size 6)))
+        (draw-text desc
+                   [(- x w2 16) (+ h desc-y 2)]
+                   :size (- size 6)
+                   :color c2))
+
       (draw-text (string
                    v
                    " "
                    (capitalize k))
                  [x y]
                  :size size
-                 :color c)
+                 :color (if hover hover-c c))
+
       (+= y size))))
 
 (defn render-action-log
@@ -1557,6 +1753,8 @@
 
 (defn do-npc-turn
   [world]
+  (print "doing npc turn")
+  (def to-act @[])
   (loop [i :range [0 (length world)]
          :let [tile (in world i)
                x (mod i ww)
@@ -1564,6 +1762,10 @@
          o :in tile
          :when (and (not (o :dead))
                     (o :act))]
+    (array/push to-act o))
+
+  (loop [o :in to-act]
+    (print (o :name) " acts.")
     (:act o)))
 
 (defn on-event
