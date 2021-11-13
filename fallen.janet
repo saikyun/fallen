@@ -122,8 +122,26 @@
   [pos]
   (-> (v/v* pos [w h])
       (v/v+ offset)
-      (v/v+ [(* w 0.5) (* h 0.5)])))
+      (v/v+ [(* w 0.5)
+             (* h 0.5)])))
 
+(defn roll-die
+  [n]
+  (inc (math/floor (* n (math/random)))))
+
+(defn get-table
+  [t res]
+  (var outcome nil)
+  (loop [v :in (reverse (partition 2 t))]
+    (when (>= res (v 0))
+      (set outcome (v 1))
+      (break)))
+  outcome)
+
+(defn roll-table
+  [t die]
+  (def res (roll-die die))
+  (get-table t res))
 
 (defn circle
   [{:color color
@@ -161,6 +179,10 @@
     :dice @[1 4 3 2 5 6]
     :hp 30
     :max-hp 42
+    :faith 14
+    :max-faith 22
+    :insanity 0
+    :max-insanity 70
     :damage 3
     :blocking true
     :difficulty 4
@@ -171,28 +193,66 @@
 
 
 (defn dmg-anim
-  [o dmg]
-
+  [o dmg &keys {:color color}]
   (anim
     (with-dyns [:world world-list]
-      (def dur 30)
+      (def col @[;color 0])
+      (def dur 60)
 
       (loop [i :range-to [0 dur]
              :let [p2 (ease-out (/ (* 1 i) dur))
                    p (math/sin (* math/pi (/ i dur)))]]
+        # fades in / out alpha
+        (put col 3 p)
         (yield (draw-text (string dmg)
                           (let [pos (screen-pos (pos o))]
-                            (update pos 1 - (* (* 0.5 (+ 0.4 p2)) h)))
-                          :color [0.9 0.1 0.1 p]
+                            (update pos 1 - (* (+ 0.6 (* 0.3 p2)) h)))
+                          :color col
                           :size 32
                           :center true))))))
 
 
-(do comment
+(comment
 
   (dmg-anim player 10)
   #
 )
+
+(defn flash-text-above
+  [o text]
+  (anim
+    (with-dyns [:world world-list]
+      (def dur 20)
+      (def col @[0 0 0 1])
+
+      (loop [i :range-to [0 dur]
+             :let [p (ease-out-quad (/ i dur))
+                   p (+ 0.2 (* 0.8 p))]]
+        (put col 0 p)
+        (put col 1 p)
+        (put col 2 p)
+        (yield (draw-text text
+                          (let [pos (screen-pos (pos o))]
+                            (update pos 1 - (* 2 h)))
+                          :color col
+                          :center true)))
+      (loop [i :range-to [0 200]]
+        (yield (draw-text text
+                          (let [pos (screen-pos (pos o))]
+                            (update pos 1 - (* 2 h)))
+                          :color col
+                          :center true)))
+      (loop [i :range-to [0 dur]
+             :let [p (/ i dur)
+                   p (+ 0.2 (* 0.8 (- 1 p)))]]
+        (put col 0 p)
+        (put col 1 p)
+        (put col 2 p)
+        (yield (draw-text text
+                          (let [pos (screen-pos (pos o))]
+                            (update pos 1 - (* 2 h)))
+                          :color col
+                          :center true))))))
 
 (defn flash-die-bar
   [o]
@@ -508,6 +568,10 @@
 
 (def p @[(table/clone ground) player])
 
+(def dmg-color [0.9 0.1 0.1])
+(def faith-dmg-color [0.1 0.1 0.9])
+(def insanity-dmg-color [0.1 0.9 0.1])
+
 (defn fight
   [defender attacker &keys {:difficulty difficulty
                             :total total}]
@@ -515,7 +579,7 @@
               (- total difficulty)))
 
   (print "huh?")
-  (dmg-anim defender dmg)
+  (dmg-anim defender dmg :color dmg-color)
   (action-log (attacker :name) " dealt " dmg " damage to " (defender :name) ".")
   (update defender :hp - dmg)
 
@@ -535,21 +599,30 @@
   [o tile-i]
   (let [tile (in (dyn :world) tile-i)
         any-difficult (find |($ :difficulty) tile)]
-    (if (and any-difficult
+    # if one must choose a die, use the first branch
+    (if (and false # disabled branch
+             any-difficult
              (not (o :selected-die)))
-      (do (flash-die-bar any-difficult)
+      (do
+        (action-log (o :name) "'s faith is lacking.")
+        (flash-die-bar any-difficult)
         nil)
 
       (let [total (if-not any-difficult
                     0
-                    (let [roll (inc (math/floor (* 6 (math/random))))
-                          die-i (o :selected-die)
-                          selected-die (get-in o [:dice die-i])
-                          total (+ roll selected-die)]
-                      (action-log (string (o :name) " used a " selected-die ", and rolled a " roll " for a total of " total "..."))
-                      (put-in o [:dice die-i] 0)
-                      (put o :selected-die nil)
-                      total))]
+                    (let [roll (roll-die 6)]
+                      # with selected die
+                      (if-let [die-i (o :selected-die)]
+                        (let [selected-die (get-in o [:dice die-i])
+                              total (+ roll selected-die)]
+                          (action-log (string (o :name) " used a " selected-die ", and rolled a " roll " for a total of " total "..."))
+                          (put-in o [:dice die-i] 0)
+                          (put o :selected-die nil)
+                          total)
+
+                        (do # no die selected
+                          (action-log (string (o :name) " rolled a " roll "..."))
+                          roll))))]
 
         (seq [other :in tile
               :let [difficulty (other :difficulty)
@@ -558,19 +631,32 @@
                         (action-log (other :name) " has armour rank " (other :difficulty) ".")
                         difficulty
                         (action-log (other :name) " has difficulty " (other :difficulty) "."))]
-              :when (and (other :interact)
-                         (or (not difficulty)
-                             (>= total difficulty)))]
-          (when difficulty
-            (action-log "Success!"))
-          (:interact other o
-                     :total total
-                     :difficulty difficulty)
-          other)))))
+              :when (other :interact)]
+          # if the roll fails
+          (if (and difficulty
+                   (< total difficulty))
 
-(defn roll-die
-  [n]
-  (inc (math/floor (* n (math/random)))))
+            (if (pos? (o :faith))
+              (let [faith-dmg (roll-die 6)]
+                (action-log (o :name) "'s faith is being tested...")
+                (when-let [t (other :fail-quotes-table)]
+                  (flash-text-above o (get-table t faith-dmg)))
+                (update o :faith - faith-dmg)
+                (dmg-anim o faith-dmg :color faith-dmg-color))
+              (let [insanity-dmg (+ (roll-die 6) (roll-die 6))]
+                (action-log (o :name) " is God's favoured!")
+                (when-let [t (other :fail-quotes-table)]
+                  (flash-text-above o "I'm the daughter of God himself!"))
+                (update o :insanity + insanity-dmg)
+                (dmg-anim o insanity-dmg :color insanity-dmg-color)))
+
+            (do # roll succeded!
+              (when difficulty
+                (action-log "Success!"))
+              (:interact other o
+                         :total total
+                         :difficulty difficulty)))
+          other)))))
 
 (defn fight-neighbour
   [self]
@@ -688,7 +774,11 @@
     :offset 10
     :difficulty 7
     :interact pick-lock
-    :render :door-rec})
+    :render :door-rec
+    :fail-quotes-table
+    @[0 "I must be free of sin."
+      3 "I won't be stopped so easily."
+      6 "Fucking lock! *kicks door*"]})
 
 (defn nil-safe-inc
   [v]
@@ -733,24 +823,14 @@
       6 :health-potion}})
 
 (def nof-items-table
-  [[0 1]
-   [3 2]
-   [6 3]])
+  [0 1
+   3 2
+   6 3])
 
 (def quality-table
-  [[0 1]
-   [3 2]
-   [6 3]])
-
-(defn roll-table
-  [t die]
-  (def res (roll-die die))
-  (var outcome nil)
-  (loop [v :in (reverse t)]
-    (when (>= res (v 0))
-      (set outcome (v 1))
-      (break)))
-  outcome)
+  [0 1
+   3 2
+   6 3])
 
 (defn random-items
   []
@@ -933,14 +1013,43 @@
 
       (+= y (* (min 1 (* 2 alpha)) (+ spacing size))))))
 
+
+(defn draw-bar
+  ``
+  Takes a label, a value (e.g. hp), the upper bound (e.g. max-hp),
+  y-offset, scale and color.
+  Renders an outlined bar with the label.
+  ``
+  [label curr-v max-v y-offset scale color]
+  (draw-text label
+             [20 y-offset]
+             :color [1 1 1 0.7]
+             :size 16)
+  (draw-rectangle 16 (+ y-offset 16)
+                  (math/floor (+ (* scale max-v) 4))
+                  20 0x444444ff)
+  (draw-rectangle 18 (+ y-offset 18)
+                  (math/floor (* scale max-v))
+                  16 0x222222ff)
+  (draw-rectangle 20 (+ y-offset 20)
+                  (math/floor (* scale curr-v))
+                  12 color))
+
 (defn render-player-ui
   [player]
-  (def {:max-hp max-hp
-        :hp hp
+  (def {:hp hp
+        :max-hp max-hp
+        :faith faith
+        :max-faith max-faith
+        :insanity insanity
+        :max-insanity max-insanity
         :inventory inv} player)
-  (draw-rectangle 16 16 (+ max-hp 4) 20 0x444444ff)
-  (draw-rectangle 18 18 max-hp 16 0x222222ff)
-  (draw-rectangle 20 20 hp 12 0xaa3333ff)
+
+  (draw-bar "Health" hp max-hp 16 2 0xaa3333ff)
+
+  (draw-bar "Faith" faith max-faith 62 2 0x33aaffff)
+
+  (draw-bar "Insanity" insanity max-insanity 110 2 0x33aa33ff)
 
   (render-action-log player)
   (render-inventory player)
