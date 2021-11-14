@@ -1887,6 +1887,8 @@
 
   (init-window 600 800 "Rats")
 
+  (set-target-fps 60)
+  
   (frp/init-chans)
 
   (frp/subscribe-first! frp/mouse on-event)
