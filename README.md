@@ -2,7 +2,7 @@
 
 ## Running the releases
 
-First download the fallen binary for your platform.
+First download the fallen binary for your platform from [releases](https://github.com/saikyun/fallen/releases).
 
 ### macos / linux
 
