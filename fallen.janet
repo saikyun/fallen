@@ -1,5 +1,6 @@
 (use freja/flow)
 (import freja/frp)
+(import freja/assets)
 
 (defn points-between-line
   [[emx emy] [pmx pmy]]
@@ -1882,6 +1883,8 @@
 
 (defn main
   [& _]
+  (assets/register-default-fonts)
+
   (init-window 600 800 "Rats")
 
   (frp/init-chans)
@@ -1900,7 +1903,7 @@
              :render-x 0
              :render-y 0
              :focused? true})
-    
+
     (end-drawing))
 
   (close-window))
