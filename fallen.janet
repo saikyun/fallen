@@ -1,4 +1,5 @@
 (use freja/flow)
+(import freja/frp)
 
 (defn points-between-line
   [[emx emy] [pmx pmy]]
@@ -832,7 +833,7 @@
         (- h spacing)
         hc))
 
-    (do comment
+    (comment
       (draw-text
         (string x "/" y)
         [(* x w)
@@ -1131,8 +1132,8 @@
          :let [x (math/floor x)
                y (math/floor y)
                blocking (blocking? (xy->i x y))
-               _
-               (flash-text-on (first (get (dyn :world) (xy->i x y))) "*")]
+               # _ (flash-text-on (first (get (dyn :world) (xy->i x y))) "*")
+]
 
          :when (and blocking
                     (not= self blocking))]
@@ -1152,9 +1153,9 @@
       true)
 
     (self :last-known-pos)
-    (when-let [p (get (tracev (points-between-line
-                                (pos self)
-                                (self :last-known-pos))) 1)]
+    (when-let [p (get (points-between-line
+                        (pos self)
+                        (self :last-known-pos)) 1)]
       (def target (map math/floor p))
       (do (flash-text-above self "?")
         (move-i self (xy->i ;target))
@@ -1173,8 +1174,8 @@
          :let [x (math/floor x)
                y (math/floor y)
                blocking (blocking? (xy->i x y))
-               _
-               (flash-text-on (first (get (dyn :world) (xy->i x y))) "*")]
+               # _ (flash-text-on (first (get (dyn :world) (xy->i x y))) "*")
+]
 
          :when (and blocking
                     (not= self blocking)
@@ -1186,7 +1187,7 @@
   (when blocked
     (put self :target nil))
 
-  (cond (= (tracev (pos self)) (tracev (self :last-known-pos)))
+  (cond (= (pos self) (self :last-known-pos))
     (do (put self :last-known-pos nil)
       (flash-text-above self ":("))
 
@@ -1308,14 +1309,9 @@
    {:description
     ``
     +1 Lockpicking
-    ``
-    :flavour
-    ``
-    "Crafted by the Thieves Guild in Robios."
     ``}
    :short-sword {:description "+1 Melee damage"}
-   :cloth-armor {:description "+1 Armor"
-                 :flavour "Favoured by the thiefs of Robios."}})
+   :cloth-armor {:description "+1 Armor"}})
 
 (def item-table
   {1 {1 :short-sword
@@ -1391,10 +1387,10 @@
         X X X X X X X X X X X X X . X X >
         X X X X X X X X X x x x x . X X >
         X X X X x x x x x . . . . . X X >
-        X X X X . . . . . . . . . r X X >
+        X X X X . . z . . . . . . r X X >
         X X X X . . . . . . . . X X X X >
         X X X X w . . . . . . . X X X X >
-        X X X X X X X X X . . X X X X X >
+        X X X X X X X X X . z X X X X X >
         X X X X X X X X X . . X X X X X >
         X X X X X X X X X . . X X X X X >
         X X X X X X X X X X X X X X X X >
@@ -1466,12 +1462,12 @@
                    :size size
                    :color c)
 
-        (def desc (get-in items [k :flavour]))
-        (def [w2 h2] (measure-text desc :size (- size 6)))
-        (draw-text desc
-                   [(- x w2 16) (+ h desc-y 2)]
-                   :size (- size 6)
-                   :color c2))
+        (when-let [desc (get-in items [k :flavour])]
+          (def [w2 h2] (measure-text desc :size (- size 6)))
+          (draw-text desc
+                     [(- x w2 16) (+ h desc-y 2)]
+                     :size (- size 6)
+                     :color c2)))
 
       (draw-text (string
                    v
@@ -1878,5 +1874,36 @@
 
     (++ tick)))
 
-(start-game {:render render
-             :on-event on-event})
+#(start-game {:render render
+#             :on-event on-event})
+
+(import freja/state)
+(import freja/events :as e)
+
+(defn main
+  [& _]
+  (init-window 600 800 "Rats")
+
+  (frp/init-chans)
+
+  (frp/subscribe-first! frp/mouse on-event)
+  #(frp/subscribe-first! frp/keyboard pp)
+  (e/put! state/focus :focus @{:on-event (fn [_ ev] (on-event ev))})
+
+  (while (not (window-should-close))
+    (begin-drawing)
+    (clear-background :white)
+    (frp/trigger (get-frame-time))
+
+    (render {:width (get-screen-width)
+             :height (get-screen-height)
+             :render-x 0
+             :render-y 0
+             :focused? true})
+    
+    (end-drawing))
+
+  (close-window))
+
+#(main)
+
