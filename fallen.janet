@@ -2,6 +2,28 @@
 (import freja/frp)
 (import freja/assets)
 
+(var lights @[])
+
+(defn light
+  [x y]
+  (var brightness 0)
+
+  (loop [l :in lights
+         :let [lx (in l :light/x)
+               ly (in l :light/y)
+               r (in l :radius)
+               dist
+               (+ (math/pow
+                    (math/abs (- x lx)) 2)
+                  (math/pow
+                    (math/abs (- y ly)) 2))
+               dist (- r (math/sqrt dist))]
+         :when (pos? dist)]
+    (+= brightness (/ dist r)))
+
+  brightness)
+
+
 (defn points-between-line
   [[emx emy] [pmx pmy]]
 
@@ -78,6 +100,31 @@
 # world width, is set later
 (var ww nil)
 
+
+(defmacro loop-world-tile
+  [world & body]
+  ~(loop [i :range [0 (length ,world)]
+          :let [tile (in ,world i)
+                x (mod i ww)
+                y (math/floor (/ i ww))]]
+     ,;body))
+
+(defmacro loop-world
+  [world & body]
+  ~(loop [i :range [0 (length ,world)]
+          :let [tile (in ,world i)
+                x (mod i ww)
+                y (math/floor (/ i ww))]
+          o :in tile]
+     ,;body))
+
+
+(defn xy->tile
+  [x y]
+  (in (dyn :world)
+      (+ x (* y ww))))
+
+
 # camera offset
 (var offset @[#(* (+ w spacing) 0.5 (length (first world)))
               #(* (+ h spacing) 0.5 (length world))
@@ -127,7 +174,7 @@
                          16)
                       (+ 16 (* (+ spacing size) i))]
                      :font :monospace
-                     :color 0xeeeeee99
+                     :color 0x99eeeeee
                      :size size)))))
 
   (loop [[k l] :pairs named-logs]
@@ -202,11 +249,6 @@
       (+ (* n1
             (math/pow (- p (/ 1.5 d1)) 2))
          0.75)
-
-      #(log :2 (* n1
-      #          (- p (/ 1.5 d1))
-      #         (+ p
-      #           0.75)))
 
       (< p (/ 2.5 d1))
       (+ (* n1
@@ -287,7 +329,8 @@
   (defn draw-target
     []
     (when target
-      (draw-text (string diff-label target)
+      (draw-text (string diff-label #target
+)
                  [(/ rw 2) (* rh 0.4)]
                  :color :white
                  :size 32
@@ -504,13 +547,17 @@
     [(mod i ww)
      (math/floor (/ i ww))]))
 
-(defn screen-pos
-  [pos]
-  (-> (v/v* pos [w h])
+
+(defn xy->screen-pos
+  [x y]
+  (-> [(* x w) (* y h)]
       (v/v+ offset)
       (v/v+ [(* w 0.5)
              (* h 0.5)])))
 
+(defn screen-pos
+  [pos]
+  (xy->screen-pos ;pos))
 
 (defn get-table
   [t res]
@@ -521,6 +568,22 @@
       (break)))
   outcome)
 
+
+(def light-table
+  [0 -2
+   1 -1
+   4 0
+   6 1
+   10 2])
+
+(defn light-mod
+  [pos]
+  (tracev (get-table
+            light-table
+            (math/floor
+              (* 10 (light ;pos))))))
+
+
 (defn roll-table
   [t die]
   (def res (roll-die die))
@@ -530,6 +593,25 @@
 (defonce player
   @{})
 
+
+(defn light-sources
+  [x y]
+  (var brightness 0)
+
+  (seq [l :in lights
+        :let [lx (in l :light/x)
+              ly (in l :light/y)
+              r (in l :radius)
+              dx (- x lx)
+              dy (- y ly)
+              dist (+ (math/pow
+                        (math/abs dx) 2)
+                      (math/pow
+                        (math/abs dy) 2))
+              dist (- r (math/sqrt dist))]
+        :when (pos? dist)]
+    [l (/ dist r) dx dy]))
+
 (defn circle
   [o x y]
   (def {:color color
@@ -538,6 +620,16 @@
 
   (when (pos? hp)
     (let [r (* 0.5 (min (- w spacing) (- h spacing)))]
+      (loop [[l v dx dy] :in (light-sources x y)]
+        (draw-ellipse
+          (math/floor (+ (* (+ x (* 0.1 dx)) w)
+                         (* 0.5 (- w spacing))))
+          (math/floor (+ (* (+ y (* 0.1 dy)) h)
+                         (+ (* 0.5 (- h spacing)))))
+          (math/floor (* (+ 1.1 (math/abs (* 0.1 dx))) r))
+          (math/floor (* (+ 1.1 (math/abs (* 0.1 dy))) r))
+          [0 0 0 v]))
+
       (draw-circle (math/floor (+ (* x w)
                                   (* 0.5 (- w spacing))))
                    (math/floor (+ (* y h)
@@ -575,11 +667,12 @@
     :max-faith 22
     :insanity 0
     :max-insanity 70
-    :damage 3
+    :damage 1
+    :z 2
     :blocking true
     :difficulty 2
-    :color 0x003333ff
-    :color2 0x002222ff
+    :color 0xff003333
+    :color2 0xff002222
     :render :circle
     :inventory @{}})
 
@@ -909,22 +1002,74 @@
       #
 )))
 
+
+(defn draw-light
+  [self x y]
+  (def r (in self :radius))
+  (def nr (- r))
+
+  (comment draw-circle (math/floor (+ (* x w) (* 0.5 w)))
+           (math/floor (+ (* y h) (* 0.5 h)))
+           (math/floor (/ (min w h) 2))
+           (self :color2))
+
+  (comment draw-ellipse (math/floor (+ (* x w) (* 0.5 w)))
+           (math/floor (+ (* y h) (* 0.5 h)))
+           (math/floor (* (dec r) (/ w 2)))
+           (math/floor (* (dec r) (/ h 2)))
+           (self :color2))
+
+  (comment
+    (draw-ellipse (math/floor (+ (* x w) (* 0.5 w)))
+                  (math/floor (+ (* y h) (* 0.5 h)))
+                  (math/floor (* r (/ w 2)))
+                  (math/floor (* r (/ h 2)))
+                  (self :color2))
+
+    (draw-ellipse (math/floor (+ (* x w) (* 0.5 w)))
+                  (math/floor (+ (* y h) (* 0.5 h)))
+                  (math/floor (* (inc r) (/ w 2)))
+                  (math/floor (* (inc r) (/ h 2)))
+                  (self :color2)))
+
+  (loop [dx :range-to [nr r]
+         dy :range-to [nr r]
+         :let [rx (+ x dx)
+               ry (+ y dy)
+               rr (+ (math/pow (math/abs dx) 2)
+                     (math/pow (math/abs dy) 2))]
+         :when (and (< rr (math/pow r 2))
+                    #(> rr (math/pow nr 2))
+                    (>= rx 0)
+                    (>= ry 0))]
+    (draw-rectangle (* rx w)
+                    (* ry h)
+                    w
+                    h
+                    (put (in self :color)
+                         3
+                         (+ 0.00 (* 0.2 (- 1 (/ rr (math/pow r 2)))))))))
+
+
 (def render-functions
   {:rec rec
    :rec2 rec2
    :circle circle
-   :door-rec door-rec})
+   :door-rec door-rec
+   :light draw-light})
 
 (def inner-wall
   @{:blocking true
-    :color 0x111111ff
+    :color [0.02 0.02 0.03]
+    :z 2
     :render :rec})
 
 (def inner-wall-down
   @{:blocking true
-    :color 0x111111ff
-    :color2 0x333333ff
+    :color (inner-wall :color)
+    :color2 [0.1 0.1 0.1]
     :offset 15
+    :z 2
     :render :rec2})
 
 (def X inner-wall)
@@ -932,8 +1077,8 @@
 
 (def ground
   @{:blocking false
-    :color [0.1 0.1 0.08]
-    :hover-color [0.7 0.7 0.7]
+    :color [0.06 0.05 0.05]
+    :hover-color [0.2 0.2 0.2]
     :hover-time 0
     :render :rec})
 
@@ -985,17 +1130,11 @@
 (defn interact-with-tile
   [o tile total]
   (seq [other :in tile
-        :let [difficulty (other :difficulty)
-              _ (cond
-                  (other :hp)
-                  (action-log (other :name)
-                              " has armour rank "
-                              (other :difficulty) ".")
-                  difficulty
-                  (action-log (other :name) " has difficulty " (other :difficulty) "."))]
+        :let [difficulty (other :difficulty)]
         :when (other :interact)]
     # if the roll fails
     (if (and difficulty
+             # this means failed roll
              (< total difficulty))
 
       (if (pos? (o :faith))
@@ -1036,7 +1175,9 @@
       (if-not any-difficult
         (interact-with-tile o tile 0)
 
-        (let [roll (roll-die 6)]
+        (let [roll (roll-die 6)
+              bonus (light-mod (pos any-difficult))
+              diff (any-difficult :difficulty)]
           (when selected-die
             (put o :selected-die nil)
             (put-in o [:render-dice die-i] @{:changed tick
@@ -1048,15 +1189,18 @@
             selected-die
 
             :difficulty-label
-            (cond
-              (any-difficult :hp)
-              "Armour rating: "
-
-              (any-difficult :difficulty)
-              "Difficulty: ")
+            (string/format
+              ``
+              Base: %d
+              Light: %d
+              Difficulty: %d
+              ``
+              diff
+              bonus
+              (- diff bonus))
 
             :target
-            (any-difficult :difficulty)
+            (- diff bonus)
 
             :after
             (fn []
@@ -1068,7 +1212,8 @@
                         total)
 
                       (do # no die selected
-                        roll))]
+                        roll))
+                    total (+ total bonus)]
 
                 (interact-with-tile o tile total)
 
@@ -1224,11 +1369,12 @@
     :damage 1
     :difficulty 3
     :blocking true
-    :color 0x552255ff
-    :color2 0x441144ff
+    :color 0xff552255
+    :color2 0xff441144
     :interact fight
     :selected-dice 0
     :dice @[0]
+    :z 2
     :act |(do
             (find-target $)
             (or (fight-neighbour $)
@@ -1267,6 +1413,7 @@
   @{:name "Locked Door"
     #    :hp 12
     #   :max-hp 12
+    :z 2
     :blocking true
     :color @[0.5 0.5 0.5 1]
     :color2 @[0.1 0.1 0.1 1]
@@ -1361,15 +1508,27 @@
     :color @[0.8 0.8 0 1]
     :color2 @[0.6 0.6 0 1]
     :offset 30
+    :z 2
     :interact take-items
     :items (if (= :random (first items))
              (random-items)
              items)
     :render :rec2})
 
+(defn light-source
+  [radius]
+  @{:name "Light"
+    :color @[1 0.8 0.6 0.1]
+    :color2 @[0.7 0.6 0.2 0.02]
+    :radius radius
+    :light true
+    :z 1
+    :render :light})
+
 
 (def world-map
   (let [l @[ground locked-door]
+        L @[ground (light-source 4)]
         c (chest :lockpick)
         w (chest :artifact)
         r (chest :random)]
@@ -1380,16 +1539,16 @@
     (def world
       @[X x x x x x x x x x x X X X X X >
         X c . . . . . l . . . x x x X X >
-        X . . p . X X X X X . . . . X X >
-        X X . . x x x x x x . X X . X X >
-        X X . . . . . z . . . X X . X X >
+        X . L p . X X X X X . . . . X X >
+        X . . . x x x x x x . X X . X X >
+        X X . . . . . z . L . X X . X X >
         X X X X X X X X X X X X X . X X >
         X X X X X X X X X X X X X . X X >
         X X X X X X X X X X X X X . X X >
         X X X X X X X X X x x x x . X X >
         X X X X x x x x x . . . . . X X >
         X X X X . . z . . . . . . r X X >
-        X X X X . . . . . . . . X X X X >
+        X X X X . L . . . . . . X X X X >
         X X X X w . . . . . . . X X X X >
         X X X X X X X X X . z X X X X X >
         X X X X X X X X X . . X X X X X >
@@ -1397,12 +1556,10 @@
         X X X X X X X X X X X X X X X X >
         #
 ])
-
     world))
 
 (set ww 0)
 (var acc 0)
-
 
 (defn new-world
   []
@@ -1427,6 +1584,15 @@
 
 (set ww (world-thing :ww))
 (set world-list (world-thing :world))
+
+(set lights @[])
+
+(loop-world
+  world-list
+  (when (o :light)
+    (put o :light/x x)
+    (put o :light/y y)
+    (array/push lights o)))
 
 (var log-h 0)
 
@@ -1560,10 +1726,10 @@
              :size 16)
   (draw-rectangle x (+ y 16)
                   (+ 4 (math/floor (+ (* scale max-v) 4)))
-                  20 0x444444ff)
+                  20 0xff444444)
   (draw-rectangle (+ x 2) (+ y 18)
                   (+ 4 (math/floor (* scale max-v)))
-                  16 0x222222ff)
+                  16 0xff222222)
   (draw-rectangle (+ x 4) (+ y 20)
                   (math/floor (* scale curr-v))
                   12 color))
@@ -1579,6 +1745,31 @@
         :insanity insanity
         :max-insanity max-insanity
         :inventory inv} player)
+
+  (when (mouse-button-down? 1)
+    (let [mt (mouse-tile)
+          pos (map math/floor (update
+                                (xy->screen-pos ;mt)
+                                1
+                                -
+                                h))
+          light-mod (get-table
+                      light-table
+                      (math/floor
+                        (* 10 (light ;mt))))]
+
+      (draw-rectangle
+        (- (pos 0) 30)
+        (- (pos 1) 20)
+        60
+        40
+        [0 0 0 0.8])
+
+      (draw-text
+        (string (when (pos? light-mod) "+") light-mod)
+        pos
+        :color :yellow
+        :center true)))
 
   (when (not (pos? hp))
     (draw-rectangle 0 0 (inc rw) (inc rh) :black)
@@ -1629,9 +1820,10 @@
             [0.5 0.5 0.5 0.5]))))
     (break))
 
-  (draw-bar "Health" hp max-hp [16 16] 2 0xaa3333ff)
+  (draw-bar "Health" hp max-hp [16 16] 2 #0xffaa3333
+            0xffff0000)
 
-  (draw-bar "Faith" faith max-faith [16 62] 2 0x33aaffff)
+  (draw-bar "Faith" faith max-faith [16 62] 2 0xff33aaff)
 
   (loop [i :range [0 4]]
     (draw-bar (if (zero? i)
@@ -1776,14 +1968,12 @@
       (set mouse-pos (v/v- pos [rx ry]))
 
       [(_ (mouse-presses (ev 0))) pos]
-      (do
-        (print "press")
-        (if (on-ui?)
-          (set ui-press true)
-          (do
-            (when npc-turn
-              (do-npc-turn (dyn :world)))
-            (move player ;(mouse-dir)))))
+      (if (on-ui?)
+        (set ui-press true)
+        (do
+          (when npc-turn
+            (do-npc-turn (dyn :world)))
+          (move player ;(mouse-dir))))
 
       [:key-down k]
       (unless
@@ -1814,10 +2004,14 @@
           #(set npc-turn npc-delay)
 )))))
 
+(def layers
+  @[@[]
+    @[]])
+
 (defn render
   [el]
   (with-dyns [:world world-list]
-    (draw-rectangle 0 0 (el :width) (el :height) :black)
+    (draw-rectangle 0 0 (el :width) (el :height) (in inner-wall :color))
     (set rw (el :width))
     (set rh (el :height))
     (set rx (el :render-x))
@@ -1856,14 +2050,33 @@
         (when (true? npc-turn)
           (do-npc-turn world))
 
+        (loop [l :in layers]
+          (array/clear l))
+
         (loop [i :range [0 (length world)]
                :let [tile (in world i)
                      x (mod i ww)
                      y (math/floor (/ i ww))]
                o :in tile
                :let [render-kw (in o :render)
-                     render-f (in render-functions render-kw)]]
-          (render-f o x y))))
+                     render-f (in render-functions render-kw)
+                     z (in o :z)]
+               # we check kw because we want the error if render-f is nil
+               :when render-kw]
+          (put o :render/x x)
+          (put o :render/y y)
+          (if (nil? z)
+            (render-f o x y)
+            (array/push (in layers (dec z)) o)))
+
+        # second render
+        (loop [l :in layers]
+          (loop [o :in l
+                 :let [render-kw (in o :render)
+                       render-f (in render-functions render-kw)]
+                 # we check kw because we want the error if render-f is nil
+                 :when render-kw]
+            (render-f o (in o :render/x) (in o :render/y))))))
 
     (when (true? npc-turn)
       (set npc-turn false))
@@ -1875,8 +2088,9 @@
 
     (++ tick)))
 
-#(start-game {:render render
-#             :on-event on-event})
+(when (dyn :freja/loading-file)
+  (start-game {:render render
+               :on-event on-event}))
 
 (import freja/state)
 (import freja/events :as e)
@@ -1888,7 +2102,7 @@
   (init-window 600 800 "Rats")
 
   (set-target-fps 60)
-  
+
   (frp/init-chans)
 
   (frp/subscribe-first! frp/mouse on-event)
