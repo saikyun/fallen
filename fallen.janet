@@ -1,6 +1,7 @@
 (use freja/flow)
 (import freja/frp)
 (import freja/assets)
+(import ./animation :as anim :fresh true)
 
 (var lights @[])
 
@@ -174,7 +175,7 @@
                          16)
                       (+ 16 (* (+ spacing size) i))]
                      :font :monospace
-                     :color 0x99eeeeee
+                     :color 0xeeeeee99
                      :size size)))))
 
   (loop [[k l] :pairs named-logs]
@@ -199,68 +200,6 @@
     (do
       (array/push logs v)
       v)))
-
-
-(var animations @[])
-
-(defn run-animations
-  [anims]
-  (var i 0)
-  (while (< i (length animations))
-    (let [a (in animations i)]
-      (if-not (fiber/can-resume? a)
-        (array/remove animations i)
-        (do
-          (try (resume a)
-            ([err fib]
-              (debug/stacktrace fib err)))
-          (++ i))))))
-
-(defmacro anim
-  [& body]
-  ~(array/push animations
-               (fiber/new (fn []
-                            ,;body))))
-
-(defn ease-out-elastic
-  [p]
-  (let [c4 (/ (* 2 math/pi) 3)]
-    (case p
-      0 0
-
-      1 1
-
-      (inc
-        (* (math/pow 2 (* -10 p))
-           (math/sin (* (- (* p 10) 0.75)
-                        c4))))
-      #
-)))
-
-(defn ease-out-bounce
-  [p]
-  (let [n1 7.5625
-        d1 2.75]
-    (cond
-      (< p (/ 1 d1))
-      (* n1 p p)
-
-      (< p (/ 2 d1))
-      (+ (* n1
-            (math/pow (- p (/ 1.5 d1)) 2))
-         0.75)
-
-      (< p (/ 2.5 d1))
-      (+ (* n1
-            (math/pow (- p (/ 2.25 d1)) 2))
-         0.9375)
-
-      # else
-      (+ (* n1
-            (math/pow (- p (/ 2.625 d1)) 2))
-         0.984375)
-      #
-)))
 
 
 (defn draw-die
@@ -302,12 +241,6 @@
           (draw-circle l-x mid-y r die-col)
           (draw-circle r-x mid-y r die-col)))))
 
-(defn ease-in-expo
-  [p]
-  (if (zero? p)
-    0
-    (math/pow 2 (- (* 10 p) 10))))
-
 (defn die-roll-anim
   [final-res &keys {:x x
                     :difficulty-label diff-label
@@ -337,7 +270,7 @@
                  :center true)))
 
   (default x 0)
-  (anim
+  (anim/anim
     (def dur-scale 1)
 
     (def dur (math/floor (* dur-scale 40)))
@@ -347,7 +280,7 @@
     (loop [i :range [0 (inc dur)]
            :let [p (/ i dur)
                  px (math/sin (* math/pi 0.5 p))
-                 py (- 1 (ease-out-bounce p))]]
+                 py (- 1 (anim/ease-out-bounce p))]]
       (when (<= delay 0)
         (set res (roll-die 6))
         (set delay (* 10 p))
@@ -466,8 +399,8 @@
     (def dur4 (math/floor (* dur-scale 20)))
     (loop [i :range [0 (inc dur4)]
            :let [p (/ i dur4)
-                 a (- 1 (ease-in-expo p))
-                 scale (- 0.4 (* 0.5 (ease-in-expo p)))
+                 a (- 1 (anim/ease-in-expo p))
+                 scale (- 0.4 (* 0.5 (anim/ease-in-expo p)))
                  col [;(cond
                          (and target (>= (+ (or extra 0) final-res) target))
                          success-die-color
@@ -511,22 +444,13 @@
       (yield (rl-pop-matrix)))
     (after)))
 
-(defn ease-out
-  [p]
-  (math/sin (* p math/pi 0.5)))
-
-(defn ease-out-quad
-  [p]
-  (- 1 (math/pow (- 1 p) 2)))
-
-
 (defn nice-flash!!!
   []
-  (anim
+  (anim/anim
     (def dur 20)
     (def col @[0 0 0 1])
     (loop [i :range-to [0 dur]
-           :let [p (ease-out-quad (/ i dur))
+           :let [p (anim/ease-out-quad (/ i dur))
                  p (+ 0.2 (* 0.2 p))]]
       (put col 0 p)
       (put col 1 p)
@@ -671,15 +595,15 @@
     :z 2
     :blocking true
     :difficulty 2
-    :color 0xff003333
-    :color2 0xff002222
+    :color 0x003333ff
+    :color2 0x002222ff
     :render :circle
     :inventory @{}})
 
 (if-not (empty? (player :render-dice))
   (loop [d :in (player :render-dice)]
     (put d :changed tick))
-  (anim
+  (anim/anim
     (loop [i :range [0 (length (player :dice))]
            :let [n (in (player :dice) i)]]
       (loop [_ :range [0 (+ 5 (roll-die 18))]]
@@ -694,13 +618,13 @@
 
 (defn dmg-anim
   [o dmg &keys {:color color}]
-  (anim
+  (anim/anim
     (with-dyns [:world world-list]
       (def col @[;color 0])
       (def dur 60)
 
       (loop [i :range-to [0 dur]
-             :let [p2 (ease-out (/ (* 1 i) dur))
+             :let [p2 (anim/ease-out (/ (* 1 i) dur))
                    p (math/sin (* math/pi (/ i dur)))]]
         # fades in / out alpha
         (put col 3 p)
@@ -725,13 +649,13 @@
   [o text]
   (def text (buffer text))
   (put latest-above o text)
-  (anim
+  (anim/anim
     (with-dyns [:world world-list]
       (def dur 20)
       (def col @[0 0 0 1])
 
       (loop [i :range-to [0 dur]
-             :let [p (ease-out-quad (/ i dur))
+             :let [p (anim/ease-out-quad (/ i dur))
                    p (+ 0.2 (* 0.8 p))]
              :when (= (latest-above o) text)]
         (put col 0 p)
@@ -766,7 +690,7 @@
   [o text]
   (def text (buffer text))
   (put latest-above o text)
-  (anim
+  (anim/anim
     (with-dyns [:world world-list]
       (def dur 20)
       (def col @[1 1 1 1])
@@ -781,13 +705,13 @@
 
 (defn flash-die-bar
   [o]
-  (anim
+  (anim/anim
     (with-dyns [:world world-list]
       (def dur 20)
       (def col @[0 0 0 1])
 
       (loop [i :range-to [0 dur]
-             :let [p (ease-out-quad (/ i dur))
+             :let [p (anim/ease-out-quad (/ i dur))
                    p (+ 0.2 (* 0.8 p))]]
         (put col 0 p)
         (put col 1 p)
@@ -815,14 +739,13 @@
                           :color col
                           :center true)))))
 
-  (anim
-
+  (anim/anim
     (loop [i :range-to [0 40]]
       (yield))
     (def dur 20)
     (def col @[0 0 0 1])
     (loop [i :range-to [0 dur]
-           :let [p (ease-out-quad (/ i dur))
+           :let [p (anim/ease-out-quad (/ i dur))
                  p (+ 0.2 (* 0.8 p))]]
       (put col 0 p)
       (put col 1 p)
@@ -1369,8 +1292,8 @@
     :damage 1
     :difficulty 3
     :blocking true
-    :color 0xff552255
-    :color2 0xff441144
+    :color 0x552255ff
+    :color2 0x441144ff
     :interact fight
     :selected-dice 0
     :dice @[0]
@@ -1726,10 +1649,10 @@
              :size 16)
   (draw-rectangle x (+ y 16)
                   (+ 4 (math/floor (+ (* scale max-v) 4)))
-                  20 0xff444444)
+                  20 0x444444ff)
   (draw-rectangle (+ x 2) (+ y 18)
                   (+ 4 (math/floor (* scale max-v)))
-                  16 0xff222222)
+                  16 0x222222ff)
   (draw-rectangle (+ x 4) (+ y 20)
                   (math/floor (* scale curr-v))
                   12 color))
@@ -1820,10 +1743,10 @@
             [0.5 0.5 0.5 0.5]))))
     (break))
 
-  (draw-bar "Health" hp max-hp [16 16] 2 #0xffaa3333
+  (draw-bar "Health" hp max-hp [16 16] 2 #0xaa3333ff
             0xffff0000)
 
-  (draw-bar "Faith" faith max-faith [16 62] 2 0xff33aaff)
+  (draw-bar "Faith" faith max-faith [16 62] 2 0x33aaffff)
 
   (loop [i :range [0 4]]
     (draw-bar (if (zero? i)
@@ -2082,7 +2005,7 @@
       (set npc-turn false))
 
     (render-player-ui player)
-    (run-animations animations)
+    (anim/run-animations anim/animations)
 
     (render-debug-ui)
 
