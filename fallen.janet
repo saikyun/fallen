@@ -1,7 +1,11 @@
 (use freja/flow)
 (import freja/frp)
 (import freja/assets)
+(import ./state :as s)
+(import ./dice :as dice)
 (import ./animation :as anim :fresh true)
+(import ./animations :as anims :fresh true)
+(import ./color :fresh true)
 
 (var lights @[])
 
@@ -79,20 +83,12 @@
 
   points)
 
-(defn roll-die
-  [n]
-  (inc (math/floor (* n (math/random)))))
-
 (var tick 0)
 
 
 (var ui-top 0)
 
 (var world-list nil)
-
-(def highlight-die-color [0.81 0.85 0.6])
-(def success-die-color [0.5 0.95 0.3])
-(def fail-die-color [0.91 0.5 0.3])
 
 (var spacing 0)
 (var w 32)
@@ -134,25 +130,12 @@
 (def die-bar-color [0.2 0.2 0.2 1])
 (def ui @{:die-bar-color die-bar-color})
 
-(var npc-delay 10)
-(var npc-turn false)
-
-(var rx 0)
-(var ry 0)
-(var rw 0)
-(var rh 0)
-
-(var ui-press false)
-
-(var mouse-pos @[0 0])
-
 (var action-logs (range 0 6))
 
 (array/fill action-logs @[0 nil])
 
 (var action-i 0)
 (var action-delay 700)
-
 
 (var logs @[])
 (var named-logs @{})
@@ -168,7 +151,7 @@
         (fn draw-log
           [i l]
           (draw-text l
-                     [(- rw
+                     [(- s/rw
                          ((measure-text l
                                         :size size
                                         :font :monospace) 0)
@@ -200,249 +183,6 @@
     (do
       (array/push logs v)
       v)))
-
-
-(defn draw-die
-  [x y w h die c]
-
-  (draw-rectangle
-    x y w h
-    c)
-
-  (let [die-col [0.01 0.15 0.2 1]
-        r (math/floor (* 0.1 w))
-        mid-x (math/floor (+ x (* 0.5 w)))
-        mid-y (math/floor (+ y (* 0.5 w)))
-        l-x (math/floor (+ x (* 0.2 w)))
-        t-y (math/floor (+ y (* 0.2 w)))
-        r-x (math/floor (+ x (* 0.8 w)))
-        b-y (math/floor (+ y (* 0.8 w)))]
-
-    (case die
-      1 (draw-circle mid-x mid-y r die-col)
-      2 (do (draw-circle l-x t-y r die-col)
-          (draw-circle r-x b-y r die-col))
-      3 (do (draw-circle r-x t-y r die-col)
-          (draw-circle mid-x mid-y r die-col)
-          (draw-circle l-x b-y r die-col))
-      4 (do (draw-circle r-x t-y r die-col)
-          (draw-circle r-x b-y r die-col)
-          (draw-circle l-x b-y r die-col)
-          (draw-circle l-x t-y r die-col))
-      5 (do (draw-circle r-x t-y r die-col)
-          (draw-circle r-x b-y r die-col)
-          (draw-circle l-x b-y r die-col)
-          (draw-circle l-x t-y r die-col)
-          (draw-circle mid-x mid-y r die-col))
-      6 (do (draw-circle r-x t-y r die-col)
-          (draw-circle r-x b-y r die-col)
-          (draw-circle l-x b-y r die-col)
-          (draw-circle l-x t-y r die-col)
-          (draw-circle l-x mid-y r die-col)
-          (draw-circle r-x mid-y r die-col)))))
-
-(defn die-roll-anim
-  [final-res &keys {:x x
-                    :difficulty-label diff-label
-                    :extra extra
-                    :target target
-                    :after after}]
-
-  (defn draw-extra
-    [x y col]
-    (when extra
-      (draw-die
-        (math/floor (- x 100))
-        (math/floor (+ 10 y))
-        60
-        60
-        extra
-        col)))
-
-  (defn draw-target
-    []
-    (when target
-      (draw-text (string diff-label #target
-)
-                 [(/ rw 2) (* rh 0.4)]
-                 :color :white
-                 :size 32
-                 :center true)))
-
-  (default x 0)
-  (anim/anim
-    (def dur-scale 1)
-
-    (def dur (math/floor (* dur-scale 40)))
-    (var res nil)
-    (var delay 0)
-
-    (loop [i :range [0 (inc dur)]
-           :let [p (/ i dur)
-                 px (math/sin (* math/pi 0.5 p))
-                 py (- 1 (anim/ease-out-bounce p))]]
-      (when (<= delay 0)
-        (set res (roll-die 6))
-        (set delay (* 10 p))
-        (when (>= (+ i delay) dur)
-          (set res final-res)))
-      (-- delay)
-      (draw-target)
-
-      (draw-extra (+ x (* 0.5 rw))
-                  (* rh 0.5)
-                  highlight-die-color)
-      (yield (draw-die
-               (- (math/floor (+ x (- rw (* 0.5 rw px)))) 30)
-               (math/floor (- (* rh 0.5) (* rh 0.5 py)))
-               60
-               60
-               res
-               highlight-die-color)))
-
-    (def dur2 (math/floor (* dur-scale 5)))
-    (loop [i :range [0 (inc dur2)]
-           :let [scale (* 0.00206
-                          (math/pow 2
-                                    (* 10 (math/sin (* math/pi
-                                                       0.5
-                                                       (/ i dur2))))))
-                 scale (* 0.2 scale)
-                 col (cond
-                       (and target (>= (+ (or extra 0) final-res) target))
-                       success-die-color
-
-                       target
-                       fail-die-color
-
-                       highlight-die-color)]]
-      (draw-target)
-      (rl-push-matrix)
-      (rl-translatef
-        (math/floor (- (+ x (- (* 0.5 rw) (* 0.5 60 scale))) 100 30))
-        (math/floor (- (* rh 0.5) (* 1 60 scale)))
-        0)
-      (rl-scalef (inc scale) (inc scale) 1)
-
-      (when extra
-        (draw-die
-          0
-          0
-          60
-          60
-          extra
-          col))
-
-      (rl-pop-matrix)
-
-      (rl-push-matrix)
-      (rl-translatef
-        (math/floor (+ -30 x (- (* 0.5 rw) (* 0.5 60 scale))))
-        (math/floor (- (* rh 0.5) (* 1 60 scale)))
-        0)
-      (rl-scalef (inc scale) (inc scale) 1)
-
-      (draw-die
-        0
-        0
-        60
-        60
-        res
-        col)
-      (yield (rl-pop-matrix)))
-
-    (def dur3 (math/floor (* dur-scale 20)))
-    (loop [i :range [0 (inc dur3)]
-           :let [p (/ i dur3)
-                 scale 0.4
-                 col (cond
-                       (and target (>= (+ (or extra 0) final-res) target))
-                       success-die-color
-
-                       target
-                       fail-die-color
-
-                       highlight-die-color)]]
-      (draw-target)
-      (rl-push-matrix)
-      (rl-translatef
-        (math/floor (- (+ -30 x (- (* 0.5 rw) (* 0.5 60 scale))) 100))
-        (math/floor (- (* rh 0.5) (* 1 60 scale)))
-        0)
-      (rl-scalef (inc scale) (inc scale) 1)
-
-      (when extra
-        (draw-die
-          0
-          0
-          60
-          60
-          extra
-          col))
-      (rl-pop-matrix)
-
-      (rl-push-matrix)
-      (rl-translatef
-        (math/floor (+ x -30 (- (* 0.5 rw) (* 0.5 60 scale))))
-        (math/floor (- (* rh 0.5) (* 1 60 scale)))
-        0)
-      (rl-scalef (inc scale) (inc scale) 1)
-      (draw-die
-        0
-        0
-        60
-        60
-        res
-        col)
-      (yield (rl-pop-matrix)))
-
-    (def dur4 (math/floor (* dur-scale 20)))
-    (loop [i :range [0 (inc dur4)]
-           :let [p (/ i dur4)
-                 a (- 1 (anim/ease-in-expo p))
-                 scale (- 0.4 (* 0.5 (anim/ease-in-expo p)))
-                 col [;(cond
-                         (and target (>= (+ (or extra 0) final-res) target))
-                         success-die-color
-
-                         target
-                         fail-die-color
-
-                         highlight-die-color)
-                      a]]]
-      (draw-target)
-      (rl-push-matrix)
-      (rl-translatef
-        (math/floor (- (+ -30 x (- (* 0.5 rw) (* 0.5 60 scale))) 100))
-        (math/floor (- (* rh 0.5) (* 1 60 scale)))
-        0)
-      (rl-scalef (inc scale) (inc scale) 1)
-
-      (when extra
-        (draw-die
-          0
-          0
-          60
-          60
-          extra
-          col))
-      (rl-pop-matrix)
-
-      (rl-push-matrix)
-      (rl-translatef
-        (math/floor (+ x -30 (- (* 0.5 rw) (* 0.5 60 scale))))
-        (math/floor (- (* rh 0.5) (* 1 60 scale)))
-        0)
-      (rl-scalef (inc scale) (inc scale) 1)
-      (draw-die
-        0
-        0
-        60
-        60
-        res
-        col)
-      (yield (rl-pop-matrix)))
-    (after)))
 
 (defn nice-flash!!!
   []
@@ -510,7 +250,7 @@
 
 (defn roll-table
   [t die]
-  (def res (roll-die die))
+  (def res (dice/roll die))
   (get-table t res))
 
 
@@ -583,7 +323,7 @@
   player
   @{:name "Saikyun"
     :dice (seq [_ :range [0 3]]
-            (roll-die 6))
+            (dice/roll 6))
     :render-dice @[]
     :hp 17
     :max-hp 17
@@ -606,15 +346,15 @@
   (anim/anim
     (loop [i :range [0 (length (player :dice))]
            :let [n (in (player :dice) i)]]
-      (loop [_ :range [0 (+ 5 (roll-die 18))]]
+      (loop [_ :range [0 (+ 5 (dice/roll 18))]]
         (yield nil))
-      (yield (die-roll-anim n
-                            :after |(put-in player [:render-dice i]
-                                            @{:die n
-                                              :changed tick})
-                            :x (* -90
-                                  (- (* 0.5 (length (player :dice)))
-                                     i)))))))
+      (yield (anims/die-roll n
+                             :after |(put-in player [:render-dice i]
+                                             @{:die n
+                                               :changed tick})
+                             :x (* -90
+                                   (- (* 0.5 (length (player :dice)))
+                                      i)))))))
 
 (defn dmg-anim
   [o dmg &keys {:color color}]
@@ -775,7 +515,7 @@
 
 (defn mouse-tile
   []
-  (let [[x y] (v/v- mouse-pos offset)]
+  (let [[x y] (v/v- s/mouse-pos offset)]
     [(math/floor (/ x w))
      (math/floor (/ y h))]))
 
@@ -783,7 +523,7 @@
 (defn mouse-dir
   []
   (let [dir (->> (screen-pos (pos player))
-                 (v/v- mouse-pos)
+                 (v/v- s/mouse-pos)
                  v/normalize
                  # if an axis is big enough, it is set to +/-1
                  (map |(if (> (math/abs $) 0.3333)
@@ -802,7 +542,7 @@
 
 (defn on-ui?
   []
-  (>= (mouse-pos 1) ui-top))
+  (>= (s/mouse-pos 1) ui-top))
 
 (defn rec
   [self x y]
@@ -1061,7 +801,7 @@
              (< total difficulty))
 
       (if (pos? (o :faith))
-        (let [faith-dmg (roll-die 6)]
+        (let [faith-dmg (dice/roll 6)]
           (action-log (o :name) "'s faith is being tested...")
           #          (when-let [t (other :fail-quotes-table)]
           #            (flash-text-above o (get-table t faith-dmg)))
@@ -1098,7 +838,7 @@
       (if-not any-difficult
         (interact-with-tile o tile 0)
 
-        (let [roll (roll-die 6)
+        (let [roll (dice/roll 6)
               bonus (light-mod (pos any-difficult))
               diff (any-difficult :difficulty)]
           (when selected-die
@@ -1106,7 +846,7 @@
             (put-in o [:render-dice die-i] @{:changed tick
                                              :die 0}))
 
-          (die-roll-anim
+          (anims/die-roll
             roll
             :extra
             selected-die
@@ -1140,7 +880,7 @@
 
                 (interact-with-tile o tile total)
 
-                (set npc-turn npc-delay)))))))))
+                (set s/npc-turn s/npc-delay)))))))))
 
 (defn fight-neighbour
   [self]
@@ -1154,7 +894,7 @@
            :let [l (living (xy->i ox oy))
                  difficulty (get l :difficulty)]
            :when l]
-      (def res (roll-die 6))
+      (def res (dice/roll 6))
       (if (>= res difficulty)
         (fight l self :difficulty difficulty
                :total res)
@@ -1177,7 +917,7 @@
             (update target-i array/push o))
 
         (when (= o player)
-          (set npc-turn npc-delay))))))
+          (set s/npc-turn s/npc-delay))))))
 
 (defn move-dir
   [o x y]
@@ -1387,19 +1127,19 @@
 (def item-table
   {1 {1 :short-sword
       2 :rusty-gun
-      3 [(roll-die 10) :gold]
+      3 [(dice/roll 10) :gold]
       4 :cloth-helmet
       5 :cloth-armor
       6 :apple}
    2 {1 :long-sword
       2 :iron-gun
-      3 [(+ 20 (roll-die 10)) :gold]
+      3 [(+ 20 (dice/roll 10)) :gold]
       4 :leather-helmet
       5 :leather-armor
       6 :holy-water}
    3 {1 :amethyst-sword
       2 :shotgun
-      3 [(+ 100 (roll-die 30)) :gold]
+      3 [(+ 100 (dice/roll 30)) :gold]
       4 :iron-helmet
       5 :iron-armor
       6 :health-potion}})
@@ -1420,7 +1160,7 @@
         quality (roll-table quality-table 6)]
     (seq [_ :range [0 nof]]
       (get-in item-table [quality
-                          (roll-die 6)]))))
+                          (dice/roll 6)]))))
 
 (defn chest
   [& items]
@@ -1526,8 +1266,8 @@
         c [1 1 1 0.9]
         hover-c [0.7 0.7 0 1]
         c2 [1 1 1 0.8]
-        x (math/floor (+ 16 (* rw 0.7)))
-        [mx my] mouse-pos]
+        x (math/floor (+ 16 (* s/rw 0.7)))
+        [mx my] s/mouse-pos]
 
     (var y (- ui-top 48 log-h))
 
@@ -1585,8 +1325,8 @@
     (draw-rectangle
       0
       (- y 16)
-      (* 32 rw)
-      rh
+      (* 32 s/rw)
+      s/rh
       [0 0 0 1])
 
     (draw-text "Log"
@@ -1695,37 +1435,37 @@
         :center true)))
 
   (when (not (pos? hp))
-    (draw-rectangle 0 0 (inc rw) (inc rh) :black)
+    (draw-rectangle 0 0 (inc s/rw) (inc s/rh) :black)
     (draw-text "You died"
                (v/v+ mind-shake
-                     [(/ rw 2) (/ rh 2)])
+                     [(/ s/rw 2) (/ s/rh 2)])
                :center true
                :size 64
                :color dmg-color)
     (break))
 
   (when (>= insanity 4)
-    (when (< 4 (roll-die 6))
-      (put mind-shake 0 (- (roll-die 6) 6)))
-    (when (< 4 (roll-die 6))
-      (put mind-shake 1 (- (roll-die 6) 6)))
-    (draw-rectangle 0 0 (inc rw) (inc rh) :black)
+    (when (< 4 (dice/roll 6))
+      (put mind-shake 0 (- (dice/roll 6) 6)))
+    (when (< 4 (dice/roll 6))
+      (put mind-shake 1 (- (dice/roll 6) 6)))
+    (draw-rectangle 0 0 (inc s/rw) (inc s/rh) :black)
     (draw-text "You lost your mind"
                (v/v+ mind-shake
-                     [(/ rw 2) (/ rh 2)])
+                     [(/ s/rw 2) (/ s/rh 2)])
                :center true
                :size 64
                :color insanity-dmg-color)
     (let [scale 1
-          w (math/floor (* 0.5 rw))
-          h (math/floor (* 0.5 rh))]
+          w (math/floor (* 0.5 s/rw))
+          h (math/floor (* 0.5 s/rh))]
       (loop [x :range [(- w) w 5]
              y :range [(- h) h 5]]
         (when (< (* (- (* 2.5 w) (math/abs x))
                     (- (* 2.5 h) (math/abs y))
                     #(* (+ 60 x) (+ 60 y))
 )
-                 (roll-die (math/pow (+ h w) 2.015)))
+                 (dice/roll (math/pow (+ h w) 2.015)))
           (draw-pixel
             (+ 5
                (math/floor
@@ -1764,16 +1504,16 @@
   (render-action-log player)
   (render-inventory player)
 
-  (when (number? npc-turn)
-    (let [p (- 1 (/ npc-turn npc-delay))
+  (when (number? s/npc-turn)
+    (let [p (- 1 (/ s/npc-turn s/npc-delay))
           a (if (< p 0.5)
               (math/sin (* math/pi p))
               1)]
       (draw-rectangle 24
-                      (- rh 148)
+                      (- s/rh 148)
                       (math/floor (* (math/sin
                                        (* math/pi 0.5 p))
-                                     (- rw 48)))
+                                     (- s/rw 48)))
                       16
                       [0.95 0.95 0.95 a])))
 
@@ -1781,16 +1521,16 @@
         padding 24
         nof (length dice)
         spacing 16
-        total-w (- rw (* 2 padding)
+        total-w (- s/rw (* 2 padding)
                    (* spacing (max 5 (dec nof))))
         w (/ total-w (max nof 6))
-        y (math/floor (- rh w (* 1.5 padding)))]
+        y (math/floor (- s/rh w (* 1.5 padding)))]
 
     (set ui-top y)
 
     (draw-rectangle (math/floor (* 0.5 padding))
                     y
-                    (math/floor (- rw padding))
+                    (math/floor (- s/rw padding))
                     (math/floor (+ w padding))
                     (ui :die-bar-color))
 
@@ -1799,13 +1539,13 @@
                   :changed t} (in dice i)
                  x (math/floor (+ padding
                                   (* i (+ w spacing))))
-                 y (math/floor (- rh padding w))
+                 y (math/floor (- s/rh padding w))
                  w (math/floor w)
                  h (math/floor w)
 
                  selected (= i (in player :selected-die))
 
-                 [mx my] mouse-pos
+                 [mx my] s/mouse-pos
                  hit (and (> my y)
                           (> mx x)
                           (< mx (+ x w)))
@@ -1814,7 +1554,7 @@
 
                  c
                  (if (or selected hit)
-                   highlight-die-color
+                   color/highlight-die
                    [0.81 0.85 0.6
                     (+ 0.0 (if (< timer 20)
                              (+ 0.2
@@ -1822,7 +1562,7 @@
                                    (math/sin (* math/pi 0.5 (/ timer 20)))))
                              0.5))])]]
 
-      (when (and hit ui-press)
+      (when (and hit s/ui-press)
         (if selected
           (put player :selected-die nil)
           (put player :selected-die i)))
@@ -1841,7 +1581,7 @@
           (+ h 2)
           [0 0 0 0.5]))
 
-      (draw-die
+      (anims/draw-die
         x
         y
         w
@@ -1849,7 +1589,7 @@
         die
         c)))
 
-  (set ui-press false))
+  (set s/ui-press false))
 
 (def mouse-presses
   {:press 1
@@ -1885,16 +1625,16 @@
   (with-dyns [:world world-list]
     (match ev
       [:mouse-move pos]
-      (set mouse-pos (v/v- pos [rx ry]))
+      (set s/mouse-pos (v/v- pos [s/rx s/ry]))
 
       [:mouse-drag pos]
-      (set mouse-pos (v/v- pos [rx ry]))
+      (set s/mouse-pos (v/v- pos [s/rx s/ry]))
 
       [(_ (mouse-presses (ev 0))) pos]
       (if (on-ui?)
-        (set ui-press true)
+        (set s/ui-press true)
         (do
-          (when npc-turn
+          (when s/npc-turn
             (do-npc-turn (dyn :world)))
           (move player ;(mouse-dir))))
 
@@ -1911,21 +1651,18 @@
         # (pp ev)
         (when
           (match k
-            :w (do (when npc-turn
+            :w (do (when s/npc-turn
                      (do-npc-turn (dyn :world)))
                  (move-dir player 0 -1))
-            :a (do (when npc-turn
+            :a (do (when s/npc-turn
                      (do-npc-turn (dyn :world)))
                  (move-dir player -1 0))
-            :s (do (when npc-turn
+            :s (do (when s/npc-turn
                      (do-npc-turn (dyn :world)))
                  (move-dir player 0 1))
-            :d (do (when npc-turn
+            :d (do (when s/npc-turn
                      (do-npc-turn (dyn :world)))
-                 (move-dir player 1 0)))
-
-          #(set npc-turn npc-delay)
-)))))
+                 (move-dir player 1 0))))))))
 
 (def layers
   @[@[]
@@ -1935,10 +1672,10 @@
   [el]
   (with-dyns [:world world-list]
     (draw-rectangle 0 0 (el :width) (el :height) (in inner-wall :color))
-    (set rw (el :width))
-    (set rh (el :height))
-    (set rx (el :render-x))
-    (set ry (el :render-y))
+    (set s/rw (el :width))
+    (set s/rh (el :height))
+    (set s/rx (el :render-x))
+    (set s/ry (el :render-y))
 
     (defer (rl-pop-matrix)
       (rl-push-matrix)
@@ -1963,14 +1700,14 @@
       # then the camera offset
       (rl-translatef ;offset 0)
 
-      (when (number? npc-turn)
-        (-- npc-turn)
+      (when (number? s/npc-turn)
+        (-- s/npc-turn)
 
-        (when (> 1 npc-turn)
-          (set npc-turn true)))
+        (when (> 1 s/npc-turn)
+          (set s/npc-turn true)))
 
       (let [world (dyn :world)]
-        (when (true? npc-turn)
+        (when (true? s/npc-turn)
           (do-npc-turn world))
 
         (loop [l :in layers]
@@ -2001,8 +1738,8 @@
                  :when render-kw]
             (render-f o (in o :render/x) (in o :render/y))))))
 
-    (when (true? npc-turn)
-      (set npc-turn false))
+    (when (true? s/npc-turn)
+      (set s/npc-turn false))
 
     (render-player-ui player)
     (anim/run-animations anim/animations)
