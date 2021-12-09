@@ -3,6 +3,8 @@
 (import ./dice :as dice :fresh true)
 (import ./state :as s)
 (import ./color :as color)
+(import ./screen)
+(import ./tile)
 
 (defn draw-die
   [x y w h die c]
@@ -66,7 +68,7 @@
     []
     (when target
       (draw-text (string diff-label #target
-)
+                         )
                  [(/ s/rw 2) (* s/rh 0.4)]
                  :color :white
                  :size 32
@@ -246,3 +248,169 @@
         col)
       (yield (rl-pop-matrix)))
     (after)))
+
+
+(defn nice-flash!!!
+  []
+  (anim/anim
+    (def dur 20)
+    (def col @[0 0 0 1])
+    (loop [i :range-to [0 dur]
+           :let [p (anim/ease-out-quad (/ i dur))
+                 p (+ 0.2 (* 0.2 p))]]
+      (put col 0 p)
+      (put col 1 p)
+      (put col 2 p)
+      (yield (put s/ui :die-bar-color col)))
+    (loop [i :range-to [0 dur]
+           :let [p (/ i dur)
+                 p (+ 0.2 (* 0.8 (- 1 p)))]]
+      (put col 0 p)
+      (put col 1 p)
+      (put col 2 p)
+      (yield (put s/ui :die-bar-color col)))))
+
+
+(defn flash-die-bar
+  [o]
+  (anim/anim
+    (with-dyns [:world s/world-list]
+      (def dur 20)
+      (def col @[0 0 0 1])
+
+      (loop [i :range-to [0 dur]
+             :let [p (anim/ease-out-quad (/ i dur))
+                   p (+ 0.2 (* 0.8 p))]]
+        (put col 0 p)
+        (put col 1 p)
+        (put col 2 p)
+        (yield (draw-text "Select a die"
+                          (let [pos (screen/->screen-pos o)]
+                            (update pos 1 - s/h))
+                          :color col
+                          :center true)))
+      (loop [i :range-to [0 200]]
+        (yield (draw-text "Select a die"
+                          (let [pos (screen/->screen-pos o)]
+                            (update pos 1 - s/h))
+                          :color col
+                          :center true)))
+      (loop [i :range-to [0 dur]
+             :let [p (/ i dur)
+                   p (+ 0.2 (* 0.8 (- 1 p)))]]
+        (put col 0 p)
+        (put col 1 p)
+        (put col 2 p)
+        (yield (draw-text "Select a die"
+                          (let [pos (screen/->screen-pos o)]
+                            (update pos 1 - s/h))
+                          :color col
+                          :center true)))))
+
+  (anim/anim
+    (loop [i :range-to [0 40]]
+      (yield))
+    (def dur 20)
+    (def col @[0 0 0 1])
+    (loop [i :range-to [0 dur]
+           :let [p (anim/ease-out-quad (/ i dur))
+                 p (+ 0.2 (* 0.8 p))]]
+      (put col 0 p)
+      (put col 1 p)
+      (put col 2 p)
+      (yield (put s/ui :die-bar-color col)))
+    (loop [i :range-to [0 dur]
+           :let [p (/ i dur)
+                 p (+ 0.2 (* 0.8 (- 1 p)))]]
+      (put col 0 p)
+      (put col 1 p)
+      (put col 2 p)
+      (yield (put s/ui :die-bar-color col)))))
+
+
+(defn dmg
+  [o dmg-amount &keys {:color color}]
+  (anim/anim
+    (with-dyns [:world s/world-list]
+      (def col @[;color 0])
+      (def dur 60)
+
+      (loop [i :range-to [0 dur]
+             :let [p2 (anim/ease-out (/ (* 1 i) dur))
+                   p (math/sin (* math/pi (/ i dur)))]]
+        # fades in / out alpha
+        (put col 3 p)
+        (yield (draw-text (string dmg-amount)
+                          (let [pos (screen/->screen-pos o)]
+                            (update pos 1 - (* (+ 0.6 (* 0.3 p2)) s/h)))
+                          :color col
+                          :size 32
+                          :center true))))))
+
+
+(comment
+
+  (dmg s/player 10)
+  #
+  )
+
+
+
+(defn flash-text-above
+  [o text]
+  (def text (buffer text))
+  (put s/latest-above o text)
+  (anim/anim
+    (with-dyns [:world s/world-list]
+      (def dur 20)
+      (def col @[0 0 0 1])
+
+      (loop [i :range-to [0 dur]
+             :let [p (anim/ease-out-quad (/ i dur))
+                   p (+ 0.2 (* 0.8 p))]
+             :when (= (s/latest-above o) text)]
+        (put col 0 p)
+        (put col 1 p)
+        (put col 2 p)
+        (yield (draw-text text
+                          (let [pos (screen/->screen-pos o)]
+                            (update pos 1 - (* 2 s/h)))
+                          :color col
+                          :center true)))
+      (loop [i :range-to [0 200]
+             :when (= (s/latest-above o) text)]
+        (yield (draw-text text
+                          (let [pos (screen/->screen-pos o)]
+                            (update pos 1 - (* 2 s/h)))
+                          :color col
+                          :center true)))
+      (loop [i :range-to [0 dur]
+             :let [p (/ i dur)
+                   p (+ 0.2 (* 0.8 (- 1 p)))]
+             :when (= (s/latest-above o) text)]
+        (put col 0 p)
+        (put col 1 p)
+        (put col 2 p)
+        (yield (draw-text text
+                          (let [pos (screen/->screen-pos o)]
+                            (update pos 1 - (* 2 s/h)))
+                          :color col
+                          :center true))))))
+
+(defn flash-text-on
+  [o text]
+  (def text (buffer text))
+  (put s/latest-above o text)
+  (anim/anim
+    (with-dyns [:world s/world-list]
+      (def dur 20)
+      (def col @[1 1 1 1])
+
+      (loop [i :range-to [0 dur]
+             :when (= (s/latest-above o) text)]
+        (yield (draw-text text
+                          (let [pos (screen/->screen-pos o)]
+                            (update pos 1 - (* 0 s/h)))
+                          :color col
+                          :center true))))))
+ 
