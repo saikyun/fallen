@@ -21,6 +21,8 @@
 (var w 32)
 (var h 48)
 
+(var hover-delay 5)
+
 # world width, is set later
 (var ww nil)
 

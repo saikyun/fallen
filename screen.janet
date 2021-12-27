@@ -17,4 +17,25 @@
   (->screen-pos [0 1])
   #=> [16 72]
   )
- 
+
+(defn on-ui?
+  []
+  (>= (s/mouse-pos 1) s/ui-top))
+
+(defn mouse-dir
+  []
+  (let [dir (->> (->screen-pos s/player)
+                 (v/v- s/mouse-pos)
+                 v/normalize
+                 # if an axis is big enough, it is set to +/-1
+                 (map |(if (> (math/abs $) 0.3333)
+                         (/ $ (math/abs $))
+                         0)))
+        mt (tile/mouse-tile)
+
+        tile-dir (v/v- mt (s/player :pos))]
+
+    # if the cursor is on an adjacent tile, or on the character
+    (if (> 2 (v/mag tile-dir))
+      (tuple ;(v/v+ tile-dir (s/player :pos)))
+      (tuple ;(v/v+ dir (s/player :pos))))))

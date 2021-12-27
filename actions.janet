@@ -252,14 +252,6 @@
       (put self :last-known-pos (get-in self [:target :pos]))
       true)))
 
-
-
-
-
-
-
-
-
 (defn move-randomly
   [self]
   (let [pos (self :pos)
@@ -279,7 +271,3 @@
       (do
         # (action-log (self :name) " shambles about.")
         (move self (get empties (- target 0)))))))
-
-
-
- 

@@ -179,7 +179,7 @@
         :color :yellow
         :center true)
 
-      (draw-text
+      (comment draw-text
         (first (tile/->tile mt))
         [(pos 0) (+ 30 (pos 1))]
         :color :yellow
@@ -235,7 +235,7 @@
     (break))
 
   (draw-bar "Health" hp max-hp [16 16] 2 #0xaa3333ff
-            0xffff0000)
+            0xff0000ff)
 
   (draw-bar "Faith" faith max-faith [16 62] 2 0x33aaffff)
 

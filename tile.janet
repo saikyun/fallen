@@ -110,4 +110,3 @@
   (array/push points [(+ 0.5 pmx) (+ 0.5 pmy)])
 
   points)
- 
