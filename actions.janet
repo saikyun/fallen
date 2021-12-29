@@ -8,7 +8,7 @@
 (import ./animations :as anims)
 (import ./color)
 
-(defn living
+(defn living?
   [o]
   (find |(-?> ($ :hp) pos?) (tile/->tile o)))
 
@@ -150,7 +150,7 @@
            oy :range-to [(dec y) (inc y)]
            :when (not fought)
            :when (not (and (= x ox) (= y oy)))
-           :let [l (living [ox oy])
+           :let [l (living? [ox oy])
                  difficulty (get l :difficulty)]
            :when l]
       (def res (dice/roll 6))
