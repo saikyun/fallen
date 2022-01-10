@@ -7,3 +7,4 @@
 (def faith-dmg [0.3 0.3 0.9])
 (def insanity-dmg #[0.7 0.1 0.7]
   [0.3 0.8 0.3])
+(def ammo [0.3 0.3 0.3])

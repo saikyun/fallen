@@ -80,7 +80,8 @@
                  (dir 0)
                  (dir 1))
 
-        dir2 (v/v* dir (/ 1 (math/abs divver)))]
+        dir2 (v/v* dir (/ 1 (math/abs divver)))
+        ]
 
     (var x start-x)
     (var y start-y)

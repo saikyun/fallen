@@ -1,7 +1,7 @@
 (import freja/vector-math :as v)
 (import ./state :as s)
 (import ./tile)
-(import ./dice)
+(import ./dice :as d)
 (import ./log)
 (import ./light)
 # should these be here?
@@ -43,7 +43,7 @@
              (< total difficulty))
 
       (if (pos? (o :faith))
-        (let [faith-dmg (dice/roll 6)]
+        (let [faith-dmg (d/roll 6)]
           (log/action-log (o :name) "'s faith is being tested...")
           #          (when-let [t (other :fail-quotes-table)]
           #            (flash-text-above o (get-table t faith-dmg)))
@@ -80,8 +80,9 @@
       (if-not any-difficult
         (interact-with-tile o tile 0)
 
-        (let [roll (dice/roll 6)
-              bonus (light/modifier any-difficult)
+        (let [roll (d/roll 6)
+              second (d/roll 6)
+              bonus 0 #(light/modifier any-difficult)
               diff (any-difficult :difficulty)]
           (when selected-die
             (put o :selected-die nil)
@@ -91,7 +92,8 @@
           (anims/die-roll
             roll
             :extra
-            selected-die
+            second
+            #selected-die
 
             :difficulty-label
             (string/format
@@ -124,22 +126,13 @@
 
                 (set s/npc-turn s/npc-delay)))))))))
 
-
 (defn fight
-  [defender attacker &keys {:difficulty difficulty
-                            :total total}]
-  (def dmg (+ (attacker :damage)
-              (- total difficulty)))
-
-  (print "huh?")
-  (anims/dmg defender dmg :color color/dmg)
-  (log/action-log (attacker :name) " dealt " dmg " damage to " (defender :name) ".")
-  (update defender :hp - dmg)
-
-  (unless (pos? (defender :hp))
-    (log/action-log (defender :name) " died in a fight against " (attacker :name) ".")
-    (put defender :dead true)))
-
+  [defender
+   attacker
+   &keys {:difficulty difficulty
+          :total total
+          :weapon weapon}]
+  (:attack weapon attacker defender))
 
 (defn fight-neighbour
   [self]
@@ -149,17 +142,23 @@
     (loop [ox :range-to [(dec x) (inc x)]
            oy :range-to [(dec y) (inc y)]
            :when (not fought)
-           :when (not (and (= x ox) (= y oy)))
+           :when (and (not (and (= x ox) (= y oy)))
+                      # can only go one step
+                      (> 1 (math/abs (+ ox oy))))
            :let [l (living [ox oy])
                  difficulty (get l :difficulty)]
            :when l]
-      (def res (dice/roll 6))
+      (print "lul: " (math/abs (+ ox oy)))
+      (def res (d/roll 6))
       (if (>= res difficulty)
-        (fight l self :difficulty difficulty
-               :total res)
+        (fight l self
+               :difficulty difficulty
+               :total res
+               :weapon (self :weapon))
         (log/action-log (self :name) " glanced on " (l :name) "s armour."))
 
       (set fought l)))
+  
   fought)
 
 (defn try-move
@@ -202,8 +201,16 @@
   (cond
     (self :target)
     (do
-      (print "moving to target")
-      (move self ;(map math/floor (points 1)))
+      #(print "moving to target")
+      (def target (map math/floor (get points 1)))
+      (def target
+        # if diagonal, randomly move sideways / vertically
+        (if (< 1 (v/mag (v/v- (self :pos) target)))
+          (let [which (math/floor (* 2 (math/random)))
+                new-target @[;(self :pos)]]
+            (put new-target which (target which)))
+          target))
+      (move self target)
       (put self :last-known-pos (get-in self [:target :pos]))
       true)
 
@@ -212,6 +219,13 @@
                         self
                         (self :last-known-pos)) 1)]
       (def target (map math/floor p))
+      (def target
+        # if diagonal, randomly move sideways / vertically
+        (if (< 1 (v/mag (v/v- (self :pos) target)))
+          (let [which (math/floor (* 2 (math/random)))
+                new-target @[;(self :pos)]]
+            (put new-target which (target which)))
+          target))
       (do (anims/flash-text-above self "?")
         (move self target)
         true))))
@@ -260,6 +274,8 @@
                       oy :range-to [(dec y) (inc y)]
                       :let [o-pos [ox oy]]
                       :when (and (not (and (= x ox) (= y oy)))
+                                 # can only go one step
+                                 (not (> 1 (math/abs (+ ox oy))))
                                  (not (blocking? o-pos)))]
                   o-pos)
         target (math/floor
@@ -271,3 +287,4 @@
       (do
         # (action-log (self :name) " shambles about.")
         (move self (get empties (- target 0)))))))
+ 

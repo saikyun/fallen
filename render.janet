@@ -6,14 +6,20 @@
 (defn rec
   [self x y]
   (let [{:color color
-         :hover-color hover-color} self
+         :hover-color hover-color
+         :targeting-color targeting-color} self
+        targeting (= (s/player :targeted-tile) [x y])
         hc (when (and hover-color
                       (not (screen/on-ui?)))
              (var deccing true)
 
              (update self :hover-time
-                     (if (= (screen/mouse-dir)
-                            [x y])
+                     (if (or targeting
+                             (= (s/player :looking-tile) [x y])
+                             (and (s/player :aiming)
+                                  (>= (s/player :max-range)
+                                      (v/dist (self :pos)
+                                              (s/player :pos)))))
                        inc
                        (do
                          (set deccing true)
@@ -24,7 +30,9 @@
 
              (let [p (/ (self :hover-time)
                         s/hover-delay)]
-               [;hover-color
+               [;(if targeting
+                   targeting-color
+                   hover-color)
                 (if (not deccing)
                   (math/pow 2 (* -10 p))
                   (- 1 (math/pow 2 (* -5 p))))]))
@@ -186,7 +194,7 @@
                       (put (in self :color)
                            3
                            (+ 0.00 (* 0.2 (- 1 (/ rr (math/pow r 2)))))
-  )))))
+                           )))))
 
 
 
@@ -233,9 +241,10 @@
                    r
                    color))))
 
-(var render-functions
+(def render-functions
   {:rec rec
    :rec2 rec2
    :circle circle
    :door-rec door-rec
    :light draw-light})
+ 

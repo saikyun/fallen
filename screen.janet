@@ -22,7 +22,7 @@
   []
   (>= (s/mouse-pos 1) s/ui-top))
 
-(defn mouse-dir
+(defn mouse-dir-diag
   []
   (let [dir (->> (->screen-pos s/player)
                  (v/v- s/mouse-pos)
@@ -39,3 +39,18 @@
     (if (> 2 (v/mag tile-dir))
       (tuple ;(v/v+ tile-dir (s/player :pos)))
       (tuple ;(v/v+ dir (s/player :pos))))))
+
+(defn mouse-dir
+  []
+  (let [dir (->> (->screen-pos s/player)
+                 (v/v- s/mouse-pos)
+                 v/normalize
+                 )
+        biggest-axis (if (>  (math/abs (dir 0))
+                             (math/abs (dir 1)))
+                       0
+                       1)
+        target @[;(s/player :pos)]]
+    (update target biggest-axis +
+            (/ (dir biggest-axis) (math/abs (dir biggest-axis))))
+    (tuple ;target)))

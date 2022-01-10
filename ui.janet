@@ -157,6 +157,8 @@
         :max-faith max-faith
         :insanity insanity
         :max-insanity max-insanity
+        :ammo ammo
+        :max-ammo max-ammo
         :inventory inv} player)
 
   (when (mouse-button-down? 1)
@@ -237,7 +239,20 @@
   (draw-bar "Health" hp max-hp [16 16] 2 #0xaa3333ff
             0xff0000ff)
 
-  (draw-bar "Faith" faith max-faith [16 62] 2 0x33aaffff)
+  #(draw-bar "Faith" faith max-faith [16 62] 2 0x33aaffff)
+
+  (loop [i :range [0 max-ammo]]
+    (draw-bar (if (zero? i)
+                "Ammo"
+                "")
+              (if (> ammo i)
+                22
+                0)
+              22
+              [(+ 16 (* i 32))
+               62]
+              1
+              color/ammo))
 
   (loop [i :range [0 4]]
     (draw-bar (if (zero? i)
@@ -252,7 +267,7 @@
               1
               color/insanity-dmg))
 
-  (render-action-log player)
+  #(render-action-log player)
   (render-inventory player)
 
   (when (number? s/npc-turn)
@@ -277,7 +292,7 @@
         w (/ total-w (max nof 6))
         y (math/floor (- s/rh w (* 1.5 padding)))]
 
-    (set s/ui-top y)
+    (set s/ui-top s/rh)
 
     (draw-rectangle (math/floor (* 0.5 padding))
                     y

@@ -1,6 +1,6 @@
 (import ./color :fresh :true)
 
-(var npc-delay 10)
+(var npc-delay 32)
 (var npc-turn false)
 
 (var rx 0)
@@ -18,8 +18,8 @@
 (var ui-top 0)
 (var world-list nil)
 (var spacing 0)
-(var w 32)
-(var h 48)
+(var w (* 2 32))
+(var h (* 2 48))
 
 (var hover-delay 5)
 

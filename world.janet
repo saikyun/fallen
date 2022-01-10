@@ -23,7 +23,7 @@
     (def measure
       @[1 2 3 4 5 6 7 8 9 0 1 2 3])
 
-    (def world
+    (def old-world
       @[X x x x x x x x x x x X X X X X >
         X c . . . . . l . . . x x x X X >
         X . L p . X X X X X . . . . X X >
@@ -41,6 +41,21 @@
         X X X X X X X X X . . X X X X X >
         X X X X X X X X X . . X X X X X >
         X X X X X X X X X X X X X X X X >
+        #
+        ])
+
+    (def world
+      @[X x x x x x x x x x x X X X X X >
+        X . . p . . . . . . . . . . X X >
+        X . . . . . . . . . . . . . X X >
+        X . . . . . . . . . . . . . X X >
+        X . z . . . . . . . . . . . X X >
+        X . . . . . . . . . . . . . X X >
+        X . . . . . . . . . . . . . X X >
+        X . . . . . . . z . . . . . X X >
+        X . . . . . . . . . . . . . X X >
+        X . . . . . . . . . . . . . X X >
+        X X X X x x x x x x x x x . X X >
         #
         ])
     world))
@@ -64,7 +79,9 @@
      (cond (indexed? cell)
        (map |(if (= s/player $)
                $
-               (table/clone $))
+               #(table/clone $)
+               (table/setproto @{} $)
+               )
             cell)
        @[(table/clone cell)]))
    :ww ww})

@@ -5,19 +5,45 @@
 # should log and text be here?
 (import ./log)
 (import ./text)
+(import ./dice :as d)
+(import ./animations :as anims)
+(import ./color)
 
+(defn melee
+  [weapon attacker defender]
+  (def dmg (d/roll 3))
+  
+  #(print "huh?")
+  (anims/dmg defender dmg :color color/dmg)
+  (log/action-log (attacker :name) " dealt " dmg " damage to " (defender :name) ".")
+  (update defender :hp - dmg)
+
+  (unless (pos? (defender :hp))
+    (log/action-log (defender :name) " died in a fight against " (attacker :name) ".")
+    (put defender :dead true)))
 
 (def zombie
-  @{:name "Zombie"
-    :hp 12
-    :max-hp 12
-    :damage 1
+  @{:name "Cultist"
+    :hp 5
+    :max-hp 5
+    :damage (fn [self target]
+              (d/roll-sum 1 3))
     :difficulty 3
     :blocking true
     :color 0x552255ff
     :color2 0x441144ff
-    :interact actions/fight
+    :interact 
+    (defn zombie-fight
+      [defender
+       attacker
+       &keys {:difficulty difficulty
+              :total total}]
+      (actions/fight defender attacker
+                     :difficulty difficulty
+                     :total total
+                     :weapon (attacker :weapon)))
     :selected-dice 0
+    :weapon @{:attack melee}
     :dice @[0]
     :z 2
     :act |(do
@@ -124,14 +150,14 @@
 
 (def inner-wall
   @{:blocking true
-    :color [0.02 0.02 0.03]
+    :color [0.2 0.2 0.25]
     :z 2
     :render :rec})
 
 (def inner-wall-down
   @{:blocking true
     :color (inner-wall :color)
-    :color2 [0.1 0.1 0.1]
+    :color2 [0.35 0.35 0.3]
     :offset 15
     :z 2
     :render :rec2})
@@ -139,7 +165,8 @@
 
 (def ground
   @{:blocking false
-    :color [0.06 0.05 0.05]
+    :color [0.18 0.15 0.15]
     :hover-color [0.2 0.2 0.2]
+    :targeting-color [0.6 0.2 0.2]
     :hover-time 0
     :render :rec})

@@ -43,7 +43,9 @@
           (draw-circle l-x b-y r die-col)
           (draw-circle l-x t-y r die-col)
           (draw-circle l-x mid-y r die-col)
-          (draw-circle r-x mid-y r die-col)))))
+          (draw-circle r-x mid-y r die-col))
+      (draw-text die [mid-x mid-y] :center true)
+      )))
 
 
 (defn die-roll
@@ -66,23 +68,26 @@
 
   (defn draw-target
     []
-    (when target
-      (draw-text (string diff-label #target
-                         )
-                 [(/ s/rw 2) (* s/rh 0.4)]
-                 :color :white
-                 :size 32
-                 :center true)))
+    #(when target
+    #  (draw-text (string diff-label #target
+    #                     )
+    #             [(/ s/rw 2) (* s/rh 0.4)]
+    #             :color :white
+    #             :size 32
+    #             :center true))
+    )
 
   (default x 0)
   (anim/anim
-    (def dur-scale 1)
+    (def dur-scale 0)
 
-    (def dur (math/floor (* dur-scale 40)))
+    (def dur (math/floor (* dur-scale 40))
+      )
     (var res nil)
     (var delay 0)
 
-    (loop [i :range [0 (inc dur)]
+    
+    (loop [i :range [0 dur]
            :let [p (/ i dur)
                  px (math/sin (* math/pi 0.5 p))
                  py (- 1 (anim/ease-out-bounce p))]]
@@ -105,8 +110,11 @@
                res
                color/highlight-die)))
 
+    
+    (set res final-res)
+
     (def dur2 (math/floor (* dur-scale 5)))
-    (loop [i :range [0 (inc dur2)]
+    (loop [i :range [0 dur2]
            :let [scale (* 0.00206
                           (math/pow 2
                                     (* 10 (math/sin (* math/pi
@@ -157,7 +165,7 @@
       (yield (rl-pop-matrix)))
 
     (def dur3 (math/floor (* dur-scale 20)))
-    (loop [i :range [0 (inc dur3)]
+    (loop [i :range [0 dur3]
            :let [p (/ i dur3)
                  scale 0.4
                  col (cond
@@ -201,8 +209,10 @@
         col)
       (yield (rl-pop-matrix)))
 
-    (def dur4 (math/floor (* dur-scale 20)))
-    (loop [i :range [0 (inc dur4)]
+    (def dur4 (math/floor (* #dur-scale
+                             1
+                             20)))
+    (loop [i :range [0 dur4]
            :let [p (/ i dur4)
                  a (- 1 (anim/ease-in-expo p))
                  scale (- 0.4 (* 0.5 (anim/ease-in-expo p)))
@@ -247,6 +257,8 @@
         res
         col)
       (yield (rl-pop-matrix)))
+
+    (print "done")
     (after)))
 
 

@@ -1,8 +1,8 @@
-(use freja/flow)
+huöaälcrlhrlc(use freja/flow)
 (import freja/frp)
 (import freja/assets)
 (import ./state :as s)
-(import ./dice :as dice)
+(import ./dice :as d)
 (import ./animation :as anim :fresh true)
 (import ./animations :as anims :fresh true)
 (import ./color :fresh true)
@@ -13,7 +13,7 @@
 (import ./log)
 (import ./text)
 (import ./items)
-(import ./world)
+(import ./world :fresh true)
 (import ./actions)
 (import ./objects)
 (import ./render :fresh true)
@@ -26,27 +26,33 @@
 
 (printf "%M" (filter |(string/find
                         "render" $)
-                       (keys module/cache)))
+                     (keys module/cache)))
 
 (merge-into
   s/player
   @{:name "Saikyun"
     :dice (seq [_ :range [0 3]]
-            (dice/roll 6))
+            (d/roll 6))
     :render-dice @[]
-    :hp 17
-    :max-hp 17
+    :hp 8
+    :max-hp 8
+    :ammo 3
+    :max-ammo 3
     :faith 14
     :max-faith 22
     :insanity 0
     :max-insanity 70
-    :damage 1
+    :max-range 2
+    :damage (fn [self target]
+              (d/roll-sum 2 3))
     :z 2
     :blocking true
     :difficulty 2
     :color 0x003333ff
     :color2 0x002222ff
     :render :circle
+    :weapon @{:attack objects/melee}
+    :update |(print "lul")
     :inventory @{}})
 
 (if-not (empty? (s/player :render-dice))
@@ -55,7 +61,7 @@
   (anim/anim
     (loop [i :range [0 (length (s/player :dice))]
            :let [n (in (s/player :dice) i)]]
-      (loop [_ :range [0 (+ 5 (dice/roll 18))]]
+      (loop [_ :range [0 (+ 5 (d/roll 18))]]
         (yield nil))
       (yield (anims/die-roll n
                              :after |(put-in s/player [:render-dice i]
@@ -77,6 +83,30 @@
          nil
          n)))
 
+(defn update-player-target
+  []
+  (let [mt (tile/mouse-tile)
+        t (tile/->tile mt)
+        d (find |(and ($ :difficulty)
+                      ($ :hp)
+                      )
+                t)]
+    (put s/player :aiming nil)
+    (put s/player :targeted-tile nil)
+    (put s/player :looking-tile nil)
+    
+    (cond
+      (= mt (s/player :pos))
+      (put s/player :looking-tile (s/player :pos))
+
+      d
+      (do
+        (put s/player :targeted-tile mt)
+        (put s/player :aiming true)
+        )
+      (put s/player :looking-tile (screen/mouse-dir))
+      )))
+
 (defn do-npc-turn
   [world]
   (def to-act @[])
@@ -90,17 +120,25 @@
     (array/push to-act o))
 
   (loop [o :in to-act]
-    (:act o)))
+    (:act o))
+
+  (update-player-target))
 
 (defn on-event
   [ev]
   (with-dyns [:world s/world-list]
     (match ev
       [:mouse-move pos]
-      (set s/mouse-pos (v/v- pos [s/rx s/ry]))
+      (do
+        (set s/mouse-pos (v/v- pos [s/rx s/ry]))
+        (update-player-target)
+        )
 
       [:mouse-drag pos]
-      (set s/mouse-pos (v/v- pos [s/rx s/ry]))
+      (do
+        (set s/mouse-pos (v/v- pos [s/rx s/ry]))
+        (update-player-target)
+        )
 
       [(_ (mouse-presses (ev 0))) pos]
       (if (screen/on-ui?)
@@ -108,7 +146,9 @@
         (do
           (when s/npc-turn
             (do-npc-turn (dyn :world)))
-          (actions/try-move s/player (screen/mouse-dir))))
+          (actions/try-move s/player
+                            (or (s/player :targeted-tile)
+                                (s/player :looking-tile)))))
 
       [:key-down k]
       (unless
